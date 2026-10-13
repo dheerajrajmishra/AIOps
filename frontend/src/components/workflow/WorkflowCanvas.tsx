@@ -18,6 +18,8 @@ import {
   useReactFlow,
   EdgeChange,
   applyEdgeChanges,
+  ConnectionLineType,
+  ConnectionMode,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
@@ -554,26 +556,46 @@ const WorkflowCanvasInner: React.FC<WorkflowCanvasProps> = ({ workflow, onWorkfl
 
   const onConnect = useCallback(
     (connection: Connection) => {
+      if (!connection.source || !connection.target) return;
+      if (connection.source === connection.target) return; // Prevent connecting node to itself
+
       const isSuccess = connection.sourceHandle === 'success';
       const edgeColor = isSuccess ? '#10b981' : '#f43f5e';
       const edgeLabel = isSuccess ? 'PASS' : 'FAIL';
 
       const newEdge: Edge = {
-        id: `edge_${connection.sourceHandle}_${connection.source}_${connection.target}`,
-        source: connection.source!,
-        target: connection.target!,
+        id: `edge_${connection.sourceHandle || 'conn'}_${connection.source}_${connection.target}`,
+        source: connection.source,
+        target: connection.target,
         sourceHandle: connection.sourceHandle,
+        targetHandle: connection.targetHandle || 'target',
         animated: true,
         style: { stroke: edgeColor, strokeWidth: 2.5, strokeDasharray: isSuccess ? undefined : '5,5' },
         markerEnd: { type: MarkerType.ArrowClosed, color: edgeColor },
         label: edgeLabel,
         labelStyle: { fill: edgeColor, fontWeight: 700, fontSize: 10 },
-        labelBgStyle: { fill: isSuccess ? (theme === 'dark' ? '#064e3b' : '#ecfdf5') : (theme === 'dark' ? '#881337' : '#fff1f2'), fillOpacity: 0.9 },
+        labelBgStyle: {
+          fill: isSuccess
+            ? theme === 'dark'
+              ? '#064e3b'
+              : '#ecfdf5'
+            : theme === 'dark'
+            ? '#881337'
+            : '#fff1f2',
+          fillOpacity: 0.95,
+        },
       };
 
-      setEdges((eds) => addEdge(newEdge, eds));
+      // In a DAG workflow, each node has at most one PASS target and one FAIL target.
+      // Connecting to a new target replaces any previous edge from that same handle.
+      setEdges((eds) => {
+        const filtered = eds.filter(
+          (e) => !(e.source === connection.source && e.sourceHandle === connection.sourceHandle)
+        );
+        return addEdge(newEdge, filtered);
+      });
 
-      // Update source node's branch link
+      // Update source node's branch link in node data
       setNodes((nds) =>
         nds.map((node) => {
           if (node.id === connection.source) {
@@ -1169,6 +1191,9 @@ const WorkflowCanvasInner: React.FC<WorkflowCanvasProps> = ({ workflow, onWorkfl
             onDoubleClick={onPaneDoubleClick}
             nodeTypes={nodeTypes}
             deleteKeyCode={['Backspace', 'Delete']}
+            connectionLineType={ConnectionLineType.SmoothStep}
+            connectionLineStyle={{ stroke: '#3b82f6', strokeWidth: 3 }}
+            connectionMode={ConnectionMode.Loose}
             fitView
             className={theme === 'dark' ? 'bg-slate-950' : 'bg-slate-100'}
           >

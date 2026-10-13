@@ -148,7 +148,7 @@ export const StepNode = memo(({ data, selected }: NodeProps<any>) => {
   const status = stepData.status || 'IDLE';
   const paramSummary = extractParameterSummary(stepData.toolType, stepData.parametersJson);
 
-  let borderStyle = 'border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 shadow-md hover:shadow-lg';
+  let borderStyle = 'border-slate-300 dark:border-slate-750 bg-white dark:bg-slate-900 shadow-md hover:shadow-lg';
   let statusBadge = null;
 
   if (status === 'RUNNING') {
@@ -159,21 +159,21 @@ export const StepNode = memo(({ data, selected }: NodeProps<any>) => {
       </span>
     );
   } else if (status === 'PASS') {
-    borderStyle = 'border-emerald-400 dark:border-emerald-500/70 bg-emerald-50/70 dark:bg-emerald-950/25 ring-1 ring-emerald-500/40 shadow-lg shadow-emerald-500/15';
+    borderStyle = 'border-emerald-500 dark:border-emerald-500/70 bg-emerald-50/70 dark:bg-emerald-950/25 ring-1 ring-emerald-500/40 shadow-lg shadow-emerald-500/15';
     statusBadge = (
       <span className="flex items-center gap-1 text-[11px] font-mono px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-500/20 text-emerald-800 dark:text-emerald-300 border border-emerald-500/40">
         <CheckCircle2 className="w-3 h-3 text-emerald-500" /> PASS
       </span>
     );
   } else if (status === 'FAIL') {
-    borderStyle = 'border-rose-400 dark:border-rose-500/70 bg-rose-50/80 dark:bg-rose-950/30 ring-2 ring-rose-500/50 shadow-lg shadow-rose-500/20';
+    borderStyle = 'border-rose-500 dark:border-rose-500/70 bg-rose-50/80 dark:bg-rose-950/30 ring-2 ring-rose-500/50 shadow-lg shadow-rose-500/20';
     statusBadge = (
       <span className="flex items-center gap-1 text-[11px] font-mono px-2 py-0.5 rounded-full bg-rose-100 dark:bg-rose-500/20 text-rose-800 dark:text-rose-300 border border-rose-500/40">
         <XCircle className="w-3 h-3 text-rose-500" /> FAIL
       </span>
     );
   } else if (status === 'ERROR') {
-    borderStyle = 'border-amber-400 dark:border-amber-500/70 bg-amber-50/80 dark:bg-amber-950/30 ring-1 ring-amber-500/40 shadow-lg shadow-amber-500/20';
+    borderStyle = 'border-amber-500 dark:border-amber-500/70 bg-amber-50/80 dark:bg-amber-950/30 ring-1 ring-amber-500/40 shadow-lg shadow-amber-500/20';
     statusBadge = (
       <span className="flex items-center gap-1 text-[11px] font-mono px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-500/20 text-amber-800 dark:text-amber-300 border border-amber-500/40">
         <AlertTriangle className="w-3 h-3 text-amber-500" /> ERROR
@@ -187,20 +187,17 @@ export const StepNode = memo(({ data, selected }: NodeProps<any>) => {
         selected ? 'ring-2 ring-primary-500 ring-offset-2 ring-offset-slate-50 dark:ring-offset-slate-950 shadow-xl' : ''
       }`}
     >
-      {/* Top Handle with Visual Label */}
-      <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-20 flex items-center justify-center">
-        <span className="text-[9px] font-bold tracking-wider font-mono uppercase bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-1.5 py-0.5 rounded-full border border-slate-300 dark:border-slate-700 shadow-sm pointer-events-none">
-          ENTRY
-        </span>
-      </div>
+      {/* Top Incoming Connection Handle (Unobstructed, High-Contrast Blue Port) */}
       <Handle
         type="target"
         position={Position.Top}
-        className="w-3.5 h-3.5 !bg-slate-600 dark:!bg-slate-300 border-2 !border-white dark:!border-slate-900 rounded-full hover:!scale-150 transition-transform shadow-md"
+        id="target"
+        title="Input: Connect previous step's PASS or FAIL here"
+        className="!w-4 !h-4 !bg-blue-600 dark:!bg-blue-500 border-2 !border-slate-900 dark:!border-white rounded-full shadow-lg hover:!scale-150 transition-transform !cursor-crosshair z-30"
       />
 
       {/* Quick Action Overlay (Shown on hover or when selected) */}
-      <div className="absolute top-2.5 right-2.5 flex items-center gap-1 opacity-80 group-hover:opacity-100 transition-opacity bg-white/90 dark:bg-slate-900/90 rounded-lg p-0.5 border border-slate-200 dark:border-slate-800 shadow-sm">
+      <div className="absolute top-2.5 right-2.5 flex items-center gap-1 opacity-80 group-hover:opacity-100 transition-opacity bg-white/95 dark:bg-slate-900/95 rounded-lg p-0.5 border border-slate-200 dark:border-slate-800 shadow-sm z-10">
         <button
           onClick={(e) => {
             e.stopPropagation();
@@ -300,52 +297,46 @@ export const StepNode = memo(({ data, selected }: NodeProps<any>) => {
         </div>
       )}
 
-      {/* Branching Output Connection Info */}
+      {/* Branching Output Connection Info Bar (Inside Card - Never Blocks Handles) */}
       <div className="mt-3.5 pt-2.5 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between text-[11px]">
-        {/* On Success Branch */}
-        <div className="flex items-center gap-1 text-emerald-700 dark:text-emerald-400 font-medium">
-          <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/50" />
-          <span>Pass:</span>
-          <span className="font-mono text-[10px] text-slate-500 dark:text-slate-400 truncate max-w-[70px]">
+        {/* On Success Branch Indicator */}
+        <div className="flex items-center gap-1.5 font-bold text-emerald-700 dark:text-emerald-400">
+          <span className="px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950/60 border border-emerald-300 dark:border-emerald-800 text-[10px] uppercase font-mono tracking-wider">
+            PASS ➔
+          </span>
+          <span className="font-mono text-[10px] text-slate-500 dark:text-slate-400 truncate max-w-[60px]" title={stepData.onSuccessStepKey || 'END'}>
             {stepData.onSuccessStepKey || 'END'}
           </span>
         </div>
 
-        {/* On Failure Branch */}
-        <div className="flex items-center gap-1 text-rose-700 dark:text-rose-400 font-medium">
-          <div className="w-2 h-2 rounded-full bg-rose-500 shadow-sm shadow-rose-500/50" />
-          <span>Fail:</span>
-          <span className="font-mono text-[10px] text-slate-500 dark:text-slate-400 truncate max-w-[70px]">
+        {/* On Failure Branch Indicator */}
+        <div className="flex items-center gap-1.5 font-bold text-rose-700 dark:text-rose-400">
+          <span className="px-1.5 py-0.5 rounded bg-rose-100 dark:bg-rose-950/60 border border-rose-300 dark:border-rose-800 text-[10px] uppercase font-mono tracking-wider">
+            FAIL ➔
+          </span>
+          <span className="font-mono text-[10px] text-slate-500 dark:text-slate-400 truncate max-w-[60px]" title={stepData.onFailureStepKey || 'END'}>
             {stepData.onFailureStepKey || 'END'}
           </span>
         </div>
       </div>
 
-      {/* Bottom Outgoing Handles with Visual Badges */}
-      <div className="absolute -bottom-3 left-[25%] -translate-x-1/2 z-20 flex items-center justify-center">
-        <span className="text-[9px] font-bold tracking-wider font-mono uppercase bg-emerald-600 text-white px-1.5 py-0.5 rounded-full shadow-md pointer-events-none flex items-center gap-0.5">
-          PASS <ArrowDown className="w-2 h-2" />
-        </span>
-      </div>
+      {/* Bottom Outgoing Handles (Unobstructed, High-Contrast Ports with Clear IDs) */}
       <Handle
         type="source"
         position={Position.Bottom}
         id="success"
         style={{ left: '25%' }}
-        className="w-3.5 h-3.5 !bg-emerald-500 border-2 !border-white dark:!border-slate-900 rounded-full hover:!scale-150 transition-transform shadow-md"
+        title="PASS: Drag from here to connect the next step on SUCCESS"
+        className="!w-4 !h-4 !bg-emerald-500 dark:!bg-emerald-400 border-2 !border-slate-900 dark:!border-white rounded-full shadow-lg hover:!scale-150 transition-transform !cursor-crosshair z-30"
       />
 
-      <div className="absolute -bottom-3 left-[75%] -translate-x-1/2 z-20 flex items-center justify-center">
-        <span className="text-[9px] font-bold tracking-wider font-mono uppercase bg-rose-600 text-white px-1.5 py-0.5 rounded-full shadow-md pointer-events-none flex items-center gap-0.5">
-          FAIL <ArrowDown className="w-2 h-2" />
-        </span>
-      </div>
       <Handle
         type="source"
         position={Position.Bottom}
         id="failure"
         style={{ left: '75%' }}
-        className="w-3.5 h-3.5 !bg-rose-500 border-2 !border-white dark:!border-slate-900 rounded-full hover:!scale-150 transition-transform shadow-md"
+        title="FAIL: Drag from here to connect the next step on FAILURE / ESCALATION"
+        className="!w-4 !h-4 !bg-rose-500 dark:!bg-rose-400 border-2 !border-slate-900 dark:!border-white rounded-full shadow-lg hover:!scale-150 transition-transform !cursor-crosshair z-30"
       />
     </div>
   );
