@@ -16,6 +16,8 @@ import {
   BackgroundVariant,
   ReactFlowProvider,
   useReactFlow,
+  EdgeChange,
+  applyEdgeChanges,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
@@ -32,15 +34,29 @@ import {
   Sparkles,
   Wand2,
   ArrowLeft,
+  ChevronDown,
+  LayoutGrid,
+  CheckCircle2,
+  AlertCircle,
+  HelpCircle,
+  Maximize2,
+  ZoomIn,
+  ZoomOut,
+  FolderOpen,
+  Power,
+  RotateCcw,
 } from 'lucide-react';
 
 import { StepNode, StepNodeData } from './StepNode';
 import { StepConfigDrawer } from './StepConfigDrawer';
 import { LiveExecutionDrawer } from './LiveExecutionDrawer';
 import { WorkflowSetupModal } from './WorkflowSetupModal';
+import { QuickAddStepModal } from './QuickAddStepModal';
+import { WorkflowShortcutsModal } from './WorkflowShortcutsModal';
 import { AgentInventoryPanel } from '@/components/inventory/AgentInventoryPanel';
 import { AiWorkflowPromptBar } from './AiWorkflowPromptBar';
 import { GeneratedWorkflowResult } from '@/lib/aiWorkflowGenerator';
+import { WORKFLOW_TEMPLATES, WorkflowTemplate } from '@/lib/workflowTemplates';
 import { Workflow, WorkflowStep, ToolType, ConsoleLogMessage, StepExecutionLog } from '@/types';
 import { createWorkflow, updateWorkflow, triggerWorkflowRun } from '@/lib/api';
 import { startSignalR, joinRunStream } from '@/lib/signalr';
@@ -64,7 +80,7 @@ const WorkflowCanvasInner: React.FC<WorkflowCanvasProps> = ({ workflow, onWorkfl
   const reactFlowInstance = useReactFlow();
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node<any>>([]);
-  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
+  const [edges, setEdges] = useEdgesState<Edge>([]);
 
   // Workflow Metadata & Setup
   const [workflowName, setWorkflowName] = useState(workflow?.name || 'New Infrastructure Runbook');
@@ -76,8 +92,249 @@ const WorkflowCanvasInner: React.FC<WorkflowCanvasProps> = ({ workflow, onWorkfl
   // Agent Inventory Dock
   const [isInventoryCollapsed, setIsInventoryCollapsed] = useState(false);
 
-  // AI Prompt Generator Bar
-  const [isAiBarOpen, setIsAiBarOpen] = useState(true);
+  // Modals & Drawers
+  const [isAiBarOpen, setIsAiBarOpen] = useState(false);
+  const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
+  const [quickAddPos, setQuickAddPos] = useState<{ x: number; y: number } | null>(null);
+  const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
+  const [isTemplatesDropdownOpen, setIsTemplatesDropdownOpen] = useState(false);
+
+  // Click outside listener for templates dropdown
+  useEffect(() => {
+    if (!isTemplatesDropdownOpen) return;
+    const handleClickOutside = () => setIsTemplatesDropdownOpen(false);
+    window.addEventListener('click', handleClickOutside);
+    return () => window.removeEventListener('click', handleClickOutside);
+  }, [isTemplatesDropdownOpen]);
+
+  // Step Drawer
+  const [selectedStep, setSelectedStep] = useState<WorkflowStep | null>(null);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveSuccessMessage, setSaveSuccessMessage] = useState<string | null>(null);
+
+  // Live Execution Stream state
+  const [isExecutionDrawerOpen, setIsExecutionDrawerOpen] = useState(false);
+  const [activeRunId, setActiveRunId] = useState<string | null>(null);
+  const [runStatus, setRunStatus] = useState<'IDLE' | 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED'>('IDLE');
+  const [totalStepsCount, setTotalStepsCount] = useState(0);
+  const [failedStepsCount, setFailedStepsCount] = useState(0);
+  const [liveLogs, setLiveLogs] = useState<ConsoleLogMessage[]>([]);
+  const [stepResults, setStepResults] = useState<Record<string, StepExecutionLog>>({});
+
+  // Background Grid Style
+  const [gridVariant, setGridVariant] = useState<BackgroundVariant>(BackgroundVariant.Dots);
+
+  // Node Callbacks (attached to node data)
+  const handleOpenConfigure = useCallback((stepKey: string) => {
+    setNodes((currentNodes) => {
+      const target = currentNodes.find((n) => n.id === stepKey || n.data.stepKey === stepKey);
+      if (target) {
+        setSelectedStep({
+          id: target.id,
+          stepKey: target.data.stepKey,
+          toolType: target.data.toolType,
+          targetHost: target.data.targetHost,
+          parametersJson: target.data.parametersJson || '{}',
+          onSuccessStepKey: target.data.onSuccessStepKey,
+          onFailureStepKey: target.data.onFailureStepKey,
+          timeoutSeconds: target.data.timeoutSeconds || 30,
+          retryCount: target.data.retryCount || 1,
+          positionX: target.position.x,
+          positionY: target.position.y,
+        });
+        setIsDrawerOpen(true);
+      }
+      return currentNodes;
+    });
+  }, [setNodes]);
+
+  const handleDuplicateNode = useCallback((stepKey: string) => {
+    setNodes((currentNodes) => {
+      const targetNode = currentNodes.find((n) => n.id === stepKey || n.data.stepKey === stepKey);
+      if (!targetNode) return currentNodes;
+
+      const newStepKey = `${targetNode.data.stepKey}_copy_${Date.now().toString().slice(-4)}`;
+      const newNode: Node<any> = {
+        id: newStepKey,
+        type: 'stepNode',
+        position: {
+          x: targetNode.position.x + 50,
+          y: targetNode.position.y + 50,
+        },
+        data: {
+          ...targetNode.data,
+          stepKey: newStepKey,
+          onSuccessStepKey: 'END',
+          onFailureStepKey: 'END',
+          status: 'IDLE',
+          metricValue: undefined,
+          errorMessage: undefined,
+          onConfigure: handleOpenConfigure,
+          onDuplicate: handleDuplicateNode,
+          onDelete: handleDeleteNode,
+        },
+      };
+
+      return [...currentNodes, newNode];
+    });
+  }, [handleOpenConfigure, setNodes]);
+
+  const handleDeleteNode = useCallback((stepKey: string) => {
+    setNodes((currentNodes) => {
+      return currentNodes
+        .filter((n) => n.id !== stepKey && n.data.stepKey !== stepKey)
+        .map((n) => {
+          let updated = false;
+          let onSuccess = n.data.onSuccessStepKey;
+          let onFailure = n.data.onFailureStepKey;
+          if (onSuccess === stepKey) {
+            onSuccess = 'END';
+            updated = true;
+          }
+          if (onFailure === stepKey) {
+            onFailure = 'END';
+            updated = true;
+          }
+          if (updated) {
+            return {
+              ...n,
+              data: {
+                ...n.data,
+                onSuccessStepKey: onSuccess,
+                onFailureStepKey: onFailure,
+              },
+            };
+          }
+          return n;
+        });
+    });
+
+    setEdges((currentEdges) =>
+      currentEdges.filter((e) => e.source !== stepKey && e.target !== stepKey)
+    );
+
+    setSelectedStep((prev) => (prev?.stepKey === stepKey ? null : prev));
+  }, [setNodes, setEdges]);
+
+  // Synchronized Edge Change handler
+  const handleEdgesChange = useCallback(
+    (changes: EdgeChange[]) => {
+      changes.forEach((change) => {
+        if (change.type === 'remove') {
+          const removed = edges.find((e) => e.id === change.id);
+          if (removed) {
+            const isSuccess = removed.sourceHandle === 'success';
+            setNodes((nds) =>
+              nds.map((n) => {
+                if (n.id === removed.source) {
+                  return {
+                    ...n,
+                    data: {
+                      ...n.data,
+                      [isSuccess ? 'onSuccessStepKey' : 'onFailureStepKey']: 'END',
+                    },
+                  };
+                }
+                return n;
+              })
+            );
+          }
+        }
+      });
+      setEdges((eds) => applyEdgeChanges(changes, eds));
+    },
+    [edges, setEdges, setNodes]
+  );
+
+  const loadWorkflowIntoCanvas = useCallback(
+    (wf: Workflow) => {
+      if (!wf.steps || wf.steps.length === 0) {
+        setNodes([]);
+        setEdges([]);
+        return;
+      }
+
+      const newNodes: Node<any>[] = wf.steps.map((step) => ({
+        id: step.stepKey,
+        type: 'stepNode',
+        position: { x: step.positionX || 250, y: step.positionY || 100 },
+        data: {
+          stepKey: step.stepKey,
+          toolType: step.toolType,
+          targetHost: step.targetHost,
+          parametersJson: step.parametersJson,
+          onSuccessStepKey: step.onSuccessStepKey,
+          onFailureStepKey: step.onFailureStepKey,
+          timeoutSeconds: step.timeoutSeconds,
+          retryCount: step.retryCount,
+          status: 'IDLE',
+          onConfigure: handleOpenConfigure,
+          onDuplicate: handleDuplicateNode,
+          onDelete: handleDeleteNode,
+        },
+      }));
+
+      const newEdges: Edge[] = [];
+      wf.steps.forEach((step) => {
+        if (step.onSuccessStepKey && step.onSuccessStepKey !== 'END') {
+          newEdges.push({
+            id: `edge_success_${step.stepKey}_${step.onSuccessStepKey}`,
+            source: step.stepKey,
+            target: step.onSuccessStepKey,
+            sourceHandle: 'success',
+            animated: true,
+            style: { stroke: '#10b981', strokeWidth: 2.5 },
+            markerEnd: { type: MarkerType.ArrowClosed, color: '#10b981' },
+            label: 'PASS',
+            labelStyle: { fill: '#10b981', fontWeight: 700, fontSize: 10 },
+            labelBgStyle: { fill: theme === 'dark' ? '#064e3b' : '#ecfdf5', fillOpacity: 0.9 },
+          });
+        }
+        if (step.onFailureStepKey && step.onFailureStepKey !== 'END') {
+          newEdges.push({
+            id: `edge_failure_${step.stepKey}_${step.onFailureStepKey}`,
+            source: step.stepKey,
+            target: step.onFailureStepKey,
+            sourceHandle: 'failure',
+            animated: true,
+            style: { stroke: '#f43f5e', strokeWidth: 2.5, strokeDasharray: '5,5' },
+            markerEnd: { type: MarkerType.ArrowClosed, color: '#f43f5e' },
+            label: 'FAIL / CALL PIC',
+            labelStyle: { fill: '#f43f5e', fontWeight: 700, fontSize: 10 },
+            labelBgStyle: { fill: theme === 'dark' ? '#881337' : '#fff1f2', fillOpacity: 0.9 },
+          });
+        }
+      });
+
+      setNodes(newNodes);
+      setEdges(newEdges);
+    },
+    [handleOpenConfigure, handleDuplicateNode, handleDeleteNode, setNodes, setEdges, theme]
+  );
+
+  const loadTemplate = (tmpl: WorkflowTemplate) => {
+    setWorkflowName(tmpl.name);
+    setWorkflowDesc(tmpl.description);
+    setCronExpression(tmpl.cronExpression);
+    setIsActive(true);
+    setIsTemplatesDropdownOpen(false);
+
+    loadWorkflowIntoCanvas({
+      id: 'tmpl-' + tmpl.id,
+      name: tmpl.name,
+      description: tmpl.description,
+      cronExpression: tmpl.cronExpression,
+      isActive: true,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      steps: tmpl.steps,
+    });
+
+    setTimeout(() => {
+      reactFlowInstance.fitView({ padding: 0.25, duration: 400 });
+    }, 100);
+  };
 
   const handleAiWorkflowGenerated = (result: GeneratedWorkflowResult) => {
     setWorkflowName(result.name);
@@ -93,21 +350,10 @@ const WorkflowCanvasInner: React.FC<WorkflowCanvasProps> = ({ workflow, onWorkfl
       updatedAt: new Date().toISOString(),
       steps: result.steps,
     });
+    setTimeout(() => {
+      reactFlowInstance.fitView({ padding: 0.25, duration: 400 });
+    }, 100);
   };
-
-  // Step Drawer
-  const [selectedStep, setSelectedStep] = useState<WorkflowStep | null>(null);
-  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
-  const [saving, setSaving] = useState(false);
-
-  // Live Execution Stream state
-  const [isExecutionDrawerOpen, setIsExecutionDrawerOpen] = useState(false);
-  const [activeRunId, setActiveRunId] = useState<string | null>(null);
-  const [runStatus, setRunStatus] = useState<'IDLE' | 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED'>('IDLE');
-  const [totalStepsCount, setTotalStepsCount] = useState(0);
-  const [failedStepsCount, setFailedStepsCount] = useState(0);
-  const [liveLogs, setLiveLogs] = useState<ConsoleLogMessage[]>([]);
-  const [stepResults, setStepResults] = useState<Record<string, StepExecutionLog>>({});
 
   // Sync canvas with workflow prop
   useEffect(() => {
@@ -118,9 +364,9 @@ const WorkflowCanvasInner: React.FC<WorkflowCanvasProps> = ({ workflow, onWorkfl
       setIsActive(workflow.isActive);
       loadWorkflowIntoCanvas(workflow);
     } else {
-      createDefaultCanvas();
+      loadTemplate(WORKFLOW_TEMPLATES[0]);
     }
-  }, [workflow]);
+  }, [workflow, loadWorkflowIntoCanvas]);
 
   // Connect to SignalR hub on mount
   useEffect(() => {
@@ -222,120 +468,89 @@ const WorkflowCanvasInner: React.FC<WorkflowCanvasProps> = ({ workflow, onWorkfl
     };
   }, [setNodes]);
 
-  const loadWorkflowIntoCanvas = (wf: Workflow) => {
-    if (!wf.steps || wf.steps.length === 0) {
-      setNodes([]);
-      setEdges([]);
-      return;
+  // Auto Layout Hierarchical DAG Function
+  const handleAutoLayout = useCallback(() => {
+    if (nodes.length === 0) return;
+
+    const inDegree: Record<string, number> = {};
+    const adj: Record<string, string[]> = {};
+    nodes.forEach((n) => {
+      inDegree[n.id] = 0;
+      adj[n.id] = [];
+    });
+    edges.forEach((e) => {
+      if (adj[e.source]) adj[e.source].push(e.target);
+      if (inDegree[e.target] !== undefined) inDegree[e.target]++;
+    });
+
+    const levels: Record<string, number> = {};
+    const queue: string[] = [];
+
+    // Roots (inDegree === 0)
+    nodes.forEach((n) => {
+      if (inDegree[n.id] === 0) {
+        queue.push(n.id);
+        levels[n.id] = 0;
+      }
+    });
+
+    if (queue.length === 0 && nodes.length > 0) {
+      queue.push(nodes[0].id);
+      levels[nodes[0].id] = 0;
     }
 
-    const newNodes: Node<any>[] = wf.steps.map((step) => ({
-      id: step.stepKey,
-      type: 'stepNode',
-      position: { x: step.positionX || 250, y: step.positionY || 100 },
-      data: {
-        stepKey: step.stepKey,
-        toolType: step.toolType,
-        targetHost: step.targetHost,
-        parametersJson: step.parametersJson,
-        onSuccessStepKey: step.onSuccessStepKey,
-        onFailureStepKey: step.onFailureStepKey,
-        timeoutSeconds: step.timeoutSeconds,
-        retryCount: step.retryCount,
-        status: 'IDLE',
-      },
-    }));
-
-    const newEdges: Edge[] = [];
-    wf.steps.forEach((step) => {
-      if (step.onSuccessStepKey && step.onSuccessStepKey !== 'END') {
-        newEdges.push({
-          id: `edge_success_${step.stepKey}_${step.onSuccessStepKey}`,
-          source: step.stepKey,
-          target: step.onSuccessStepKey,
-          sourceHandle: 'success',
-          animated: true,
-          style: { stroke: '#10b981', strokeWidth: 2 },
-          markerEnd: { type: MarkerType.ArrowClosed, color: '#10b981' },
-          label: 'PASS',
-          labelStyle: { fill: '#10b981', fontWeight: 600, fontSize: 10 },
-          labelBgStyle: { fill: '#064e3b', fillOpacity: 0.8 },
-        });
+    while (queue.length > 0) {
+      const curr = queue.shift()!;
+      const currLevel = levels[curr] || 0;
+      const neighbors = adj[curr] || [];
+      for (const next of neighbors) {
+        if (levels[next] === undefined || levels[next] < currLevel + 1) {
+          levels[next] = currLevel + 1;
+          queue.push(next);
+        }
       }
-      if (step.onFailureStepKey && step.onFailureStepKey !== 'END') {
-        newEdges.push({
-          id: `edge_failure_${step.stepKey}_${step.onFailureStepKey}`,
-          source: step.stepKey,
-          target: step.onFailureStepKey,
-          sourceHandle: 'failure',
-          animated: true,
-          style: { stroke: '#f43f5e', strokeWidth: 2, strokeDasharray: '5,5' },
-          markerEnd: { type: MarkerType.ArrowClosed, color: '#f43f5e' },
-          label: 'FAIL / CALL PIC',
-          labelStyle: { fill: '#f43f5e', fontWeight: 600, fontSize: 10 },
-          labelBgStyle: { fill: '#881337', fillOpacity: 0.8 },
-        });
+    }
+
+    nodes.forEach((n) => {
+      if (levels[n.id] === undefined) {
+        levels[n.id] = 0;
       }
     });
 
-    setNodes(newNodes);
-    setEdges(newEdges);
-  };
-
-  const createDefaultCanvas = () => {
-    const defaultSteps: WorkflowStep[] = [
-      {
-        id: '1',
-        stepKey: 'step_disk_check',
-        toolType: 'DISK_CHECK',
-        targetHost: 'localhost',
-        parametersJson: '{"drive": "C:", "thresholdPercentFree": 15}',
-        onSuccessStepKey: 'step_sql_job_check',
-        onFailureStepKey: 'step_voice_call_pic',
-        timeoutSeconds: 15,
-        retryCount: 1,
-        positionX: 320,
-        positionY: 80,
-      },
-      {
-        id: '2',
-        stepKey: 'step_voice_call_pic',
-        toolType: 'VOICE_CALL_ACTION',
-        targetHost: '+15550192834',
-        parametersJson: '{"recipientPhone": "+15550192834", "picName": "Lead SRE On-Call", "message": "Low disk space alert", "provider": "Twilio"}',
-        onSuccessStepKey: 'step_sql_job_check',
-        onFailureStepKey: 'END',
-        timeoutSeconds: 30,
-        retryCount: 1,
-        positionX: 100,
-        positionY: 280,
-      },
-      {
-        id: '3',
-        stepKey: 'step_sql_job_check',
-        toolType: 'SQL_JOB_CHECK',
-        targetHost: 'localhost\\SQLEXPRESS',
-        parametersJson: '{"jobName": "Nightly_Backup", "database": "master"}',
-        onSuccessStepKey: 'END',
-        onFailureStepKey: 'END',
-        timeoutSeconds: 20,
-        retryCount: 1,
-        positionX: 560,
-        positionY: 280,
-      },
-    ];
-
-    loadWorkflowIntoCanvas({
-      id: 'default',
-      name: 'Nightly Core Infra Audit & PIC Escalation',
-      description: 'Multi-step automated audit checking disk capacity, SQL agent jobs, and fallback voice alerting.',
-      cronExpression: '0 2 * * *',
-      isActive: true,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      steps: defaultSteps,
+    const levelGroups: Record<number, Node<any>[]> = {};
+    nodes.forEach((n) => {
+      const lvl = levels[n.id] || 0;
+      if (!levelGroups[lvl]) levelGroups[lvl] = [];
+      levelGroups[lvl].push(n);
     });
-  };
+
+    const NODE_WIDTH = 340;
+    const NODE_HEIGHT = 200;
+    const HORIZONTAL_GAP = 70;
+    const VERTICAL_GAP = 130;
+
+    const updatedNodes = nodes.map((node) => {
+      const lvl = levels[node.id] || 0;
+      const group = levelGroups[lvl];
+      const indexInGroup = group.findIndex((g) => g.id === node.id);
+      const totalInGroup = group.length;
+
+      const totalWidth = totalInGroup * NODE_WIDTH + (totalInGroup - 1) * HORIZONTAL_GAP;
+      const startX = 420 - totalWidth / 2;
+      const x = Math.round(startX + indexInGroup * (NODE_WIDTH + HORIZONTAL_GAP));
+      const y = Math.round(80 + lvl * (NODE_HEIGHT + VERTICAL_GAP));
+
+      return {
+        ...node,
+        position: { x, y },
+      };
+    });
+
+    setNodes(updatedNodes);
+    setTimeout(() => {
+      reactFlowInstance.fitView({ padding: 0.25, duration: 400 });
+    }, 60);
+  }, [nodes, edges, reactFlowInstance, setNodes]);
 
   const onConnect = useCallback(
     (connection: Connection) => {
@@ -349,11 +564,11 @@ const WorkflowCanvasInner: React.FC<WorkflowCanvasProps> = ({ workflow, onWorkfl
         target: connection.target!,
         sourceHandle: connection.sourceHandle,
         animated: true,
-        style: { stroke: edgeColor, strokeWidth: 2, strokeDasharray: isSuccess ? undefined : '5,5' },
+        style: { stroke: edgeColor, strokeWidth: 2.5, strokeDasharray: isSuccess ? undefined : '5,5' },
         markerEnd: { type: MarkerType.ArrowClosed, color: edgeColor },
         label: edgeLabel,
-        labelStyle: { fill: edgeColor, fontWeight: 600, fontSize: 10 },
-        labelBgStyle: { fill: isSuccess ? '#064e3b' : '#881337', fillOpacity: 0.8 },
+        labelStyle: { fill: edgeColor, fontWeight: 700, fontSize: 10 },
+        labelBgStyle: { fill: isSuccess ? (theme === 'dark' ? '#064e3b' : '#ecfdf5') : (theme === 'dark' ? '#881337' : '#fff1f2'), fillOpacity: 0.9 },
       };
 
       setEdges((eds) => addEdge(newEdge, eds));
@@ -374,25 +589,11 @@ const WorkflowCanvasInner: React.FC<WorkflowCanvasProps> = ({ workflow, onWorkfl
         })
       );
     },
-    [setEdges, setNodes]
+    [setEdges, setNodes, theme]
   );
 
   const onNodeClick = (_: React.MouseEvent, node: Node<any>) => {
-    const step: WorkflowStep = {
-      id: node.id,
-      stepKey: node.data.stepKey,
-      toolType: node.data.toolType,
-      targetHost: node.data.targetHost,
-      parametersJson: node.data.parametersJson || '{}',
-      onSuccessStepKey: node.data.onSuccessStepKey,
-      onFailureStepKey: node.data.onFailureStepKey,
-      timeoutSeconds: node.data.timeoutSeconds || 30,
-      retryCount: node.data.retryCount || 1,
-      positionX: node.position.x,
-      positionY: node.position.y,
-    };
-    setSelectedStep(step);
-    setIsDrawerOpen(true);
+    handleOpenConfigure(node.id);
   };
 
   const handleAddNode = useCallback(
@@ -400,8 +601,8 @@ const WorkflowCanvasInner: React.FC<WorkflowCanvasProps> = ({ workflow, onWorkfl
       const agentMeta = getAgentInventoryItem(toolType);
       const stepKey = `step_${toolType.toLowerCase()}_${Date.now().toString().slice(-4)}`;
       const nodePos = position || {
-        x: 280 + Math.random() * 80,
-        y: 120 + nodes.length * 70,
+        x: 340 + Math.random() * 60,
+        y: 120 + nodes.length * 60,
       };
 
       const newNode: Node<any> = {
@@ -418,15 +619,18 @@ const WorkflowCanvasInner: React.FC<WorkflowCanvasProps> = ({ workflow, onWorkfl
           timeoutSeconds: agentMeta.defaultTimeoutSeconds || 30,
           retryCount: agentMeta.defaultRetryCount || 1,
           status: 'IDLE',
+          onConfigure: handleOpenConfigure,
+          onDuplicate: handleDuplicateNode,
+          onDelete: handleDeleteNode,
         },
       };
 
       setNodes((nds) => [...nds, newNode]);
     },
-    [nodes.length, setNodes]
+    [nodes.length, handleOpenConfigure, handleDuplicateNode, handleDeleteNode, setNodes]
   );
 
-  // HTML5 Drag and Drop handlers from Agent Inventory onto Canvas
+  // HTML5 Drag and Drop handlers
   const onDragOver = useCallback((event: React.DragEvent) => {
     event.preventDefault();
     event.dataTransfer.dropEffect = 'move';
@@ -454,6 +658,21 @@ const WorkflowCanvasInner: React.FC<WorkflowCanvasProps> = ({ workflow, onWorkfl
     [reactFlowInstance, handleAddNode]
   );
 
+  // Canvas Double Click ➔ Quick Add
+  const onPaneDoubleClick = useCallback(
+    (event: React.MouseEvent) => {
+      const position = reactFlowInstance
+        ? reactFlowInstance.screenToFlowPosition({
+            x: event.clientX,
+            y: event.clientY,
+          })
+        : undefined;
+      setQuickAddPos(position || null);
+      setIsQuickAddOpen(true);
+    },
+    [reactFlowInstance]
+  );
+
   const handleSaveStep = (updated: WorkflowStep) => {
     setNodes((nds) =>
       nds.map((node) => {
@@ -477,14 +696,9 @@ const WorkflowCanvasInner: React.FC<WorkflowCanvasProps> = ({ workflow, onWorkfl
     setIsDrawerOpen(false);
   };
 
-  const handleDeleteStep = (stepKey: string) => {
-    setNodes((nds) => nds.filter((n) => n.id !== stepKey && n.data.stepKey !== stepKey));
-    setEdges((eds) => eds.filter((e) => e.source !== stepKey && e.target !== stepKey));
-    setIsDrawerOpen(false);
-  };
-
   const handleSaveWorkflow = async () => {
     setSaving(true);
+    setSaveSuccessMessage(null);
     try {
       const payloadSteps: Partial<WorkflowStep>[] = nodes.map((node) => ({
         stepKey: node.data.stepKey,
@@ -508,11 +722,14 @@ const WorkflowCanvasInner: React.FC<WorkflowCanvasProps> = ({ workflow, onWorkfl
       };
 
       let result: Workflow;
-      if (workflow && workflow.id && workflow.id !== 'default') {
+      if (workflow && workflow.id && !workflow.id.startsWith('tmpl-') && workflow.id !== 'default') {
         result = await updateWorkflow(workflow.id, workflowPayload);
       } else {
         result = await createWorkflow(workflowPayload);
       }
+
+      setSaveSuccessMessage('Workflow saved successfully!');
+      setTimeout(() => setSaveSuccessMessage(null), 3000);
 
       if (onWorkflowSaved) {
         onWorkflowSaved(result);
@@ -530,7 +747,6 @@ const WorkflowCanvasInner: React.FC<WorkflowCanvasProps> = ({ workflow, onWorkfl
     setLiveLogs([]);
     setStepResults({});
 
-    // Reset all node statuses to PENDING
     setNodes((nds) =>
       nds.map((n) => ({
         ...n,
@@ -543,7 +759,7 @@ const WorkflowCanvasInner: React.FC<WorkflowCanvasProps> = ({ workflow, onWorkfl
       }))
     );
 
-    if (workflow && workflow.id && workflow.id !== 'default') {
+    if (workflow && workflow.id && !workflow.id.startsWith('tmpl-') && workflow.id !== 'default') {
       try {
         const res = await triggerWorkflowRun(workflow.id);
         setActiveRunId(res.workflowId);
@@ -554,7 +770,7 @@ const WorkflowCanvasInner: React.FC<WorkflowCanvasProps> = ({ workflow, onWorkfl
       }
     }
 
-    // Interactive fallback simulation
+    // Fallback simulation
     const stepList = nodes.map((n) => n.data as StepNodeData);
     if (stepList.length === 0) return;
 
@@ -585,7 +801,7 @@ const WorkflowCanvasInner: React.FC<WorkflowCanvasProps> = ({ workflow, onWorkfl
         },
       ]);
 
-      await new Promise((r) => setTimeout(r, 1200));
+      await new Promise((r) => setTimeout(r, 1100));
 
       const isPass = current.toolType !== 'DISK_CHECK' || !current.parametersJson?.includes('FAIL');
       const status = isPass ? 'PASS' : 'FAIL';
@@ -637,12 +853,11 @@ const WorkflowCanvasInner: React.FC<WorkflowCanvasProps> = ({ workflow, onWorkfl
           checkType: current.toolType,
           status: status as any,
           metricValue: metric,
-          durationMs: 1200,
+          durationMs: 1100,
           executedAt: new Date().toISOString(),
         },
       }));
 
-      // Branch
       const nextKey = isPass ? current.onSuccessStepKey : current.onFailureStepKey;
       if (nextKey && nextKey !== 'END') {
         const nextNode = stepList.find((s) => s.stepKey === nextKey);
@@ -673,123 +888,253 @@ const WorkflowCanvasInner: React.FC<WorkflowCanvasProps> = ({ workflow, onWorkfl
     }));
   }, [nodes]);
 
+  // DAG Health & Connectivity Validation
+  const dagHealth = useMemo(() => {
+    if (nodes.length <= 1) return { isHealthy: true, message: 'Valid DAG' };
+
+    const targetNodeIds = new Set<string>();
+    const sourceNodeIds = new Set<string>();
+    edges.forEach((e) => {
+      sourceNodeIds.add(e.source);
+      targetNodeIds.add(e.target);
+    });
+
+    const disconnectedCount = nodes.filter(
+      (n) => !sourceNodeIds.has(n.id) && !targetNodeIds.has(n.id)
+    ).length;
+
+    if (disconnectedCount > 0) {
+      return {
+        isHealthy: false,
+        message: `${disconnectedCount} step${disconnectedCount > 1 ? 's' : ''} disconnected`,
+      };
+    }
+    return { isHealthy: true, message: `${nodes.length} Steps Connected` };
+  }, [nodes, edges]);
+
   const scheduleHumanText = formatCronSchedule(cronExpression);
 
   return (
     <div className="relative w-full h-[calc(100vh-64px)] bg-slate-50 dark:bg-slate-950 flex flex-col overflow-hidden transition-colors duration-200">
-      {/* Top Toolbar */}
-      <div className="h-16 px-6 bg-white/90 dark:bg-slate-900/90 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between backdrop-blur-md z-10">
-        <div className="flex items-center gap-4">
-          {/* Back to Workflows Button */}
+      {/* Top Usability Toolbar */}
+      <div className="h-16 px-4 md:px-6 bg-white/95 dark:bg-slate-900/95 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between backdrop-blur-md z-30 shadow-sm">
+        {/* Left Section: Back, Title, Inline Status Toggle, Schedule */}
+        <div className="flex items-center gap-3 md:gap-4 min-w-0">
           {onBackToWorkflows && (
             <button
               onClick={onBackToWorkflows}
-              className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-semibold flex items-center gap-1.5 border border-slate-200 dark:border-slate-700 transition-colors shadow-sm"
+              className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-semibold flex items-center gap-1.5 border border-slate-200 dark:border-slate-700 transition-colors shadow-sm shrink-0"
               title="Return to Workflows Dashboard"
             >
               <ArrowLeft className="w-3.5 h-3.5" />
-              <span>Back to Workflows</span>
+              <span className="hidden sm:inline">Back</span>
             </button>
           )}
 
-          {/* Workflow Identity & Setup Button */}
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-xl bg-primary-600/10 dark:bg-primary-600/20 border border-primary-500/30 text-primary-600 dark:text-primary-400">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="p-2 rounded-xl bg-primary-600/10 dark:bg-primary-600/20 border border-primary-500/30 text-primary-600 dark:text-primary-400 shrink-0">
               <Layers className="w-5 h-5" />
             </div>
-            <div>
+
+            <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <input
                   type="text"
                   value={workflowName}
                   onChange={(e) => setWorkflowName(e.target.value)}
                   placeholder="Workflow Name"
-                  className="bg-transparent text-slate-900 dark:text-slate-100 font-bold text-sm hover:border-slate-400 dark:hover:border-slate-700 focus:border-primary-500 focus:outline-none px-1 py-0.5 border-b border-transparent transition-colors max-w-xs"
+                  className="bg-transparent text-slate-900 dark:text-slate-100 font-bold text-sm hover:border-slate-300 dark:hover:border-slate-700 focus:border-primary-500 focus:outline-none px-1 py-0.5 border-b border-transparent transition-colors max-w-[200px] md:max-w-xs truncate"
                 />
+
                 <button
                   onClick={() => setIsSetupModalOpen(true)}
-                  title="Configure Name & Schedule"
-                  className="px-2 py-0.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white rounded-md text-[11px] font-medium border border-slate-200 dark:border-slate-700 flex items-center gap-1 transition-colors shadow-sm"
+                  title="Configure Details & Schedule"
+                  className="px-2 py-0.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white rounded-md text-[11px] font-medium border border-slate-200 dark:border-slate-700 flex items-center gap-1 transition-colors shadow-sm shrink-0"
                 >
                   <Settings className="w-3 h-3 text-slate-500 dark:text-slate-400" />
-                  <span>Setup</span>
+                  <span className="hidden md:inline">Setup</span>
                 </button>
               </div>
 
-              {/* Schedule Indicator */}
+              {/* Status & Schedule Badges */}
               <div className="flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                <span className="flex items-center gap-1 font-mono text-emerald-600 dark:text-emerald-400">
-                  <Clock className="w-3 h-3" />
-                  {scheduleHumanText}
-                </span>
-                <span className="text-slate-400 dark:text-slate-600">•</span>
-                <span
-                  className={`font-mono text-[10px] font-semibold px-1.5 py-0.2 rounded ${
+                {/* 1-Click Interactive Active/Paused Toggle */}
+                <button
+                  onClick={() => setIsActive(!isActive)}
+                  title="Click to toggle Active/Paused status"
+                  className={`font-mono text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 transition-all ${
                     isActive
-                      ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-500/20'
-                      : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700'
+                      ? 'bg-emerald-100 dark:bg-emerald-500/20 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-500/30 hover:bg-emerald-200'
+                      : 'bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-300 dark:border-slate-700 hover:bg-slate-300'
                   }`}
                 >
+                  <Power className="w-2.5 h-2.5" />
                   {isActive ? 'ACTIVE' : 'PAUSED'}
-                </span>
+                </button>
+
+                <span className="text-slate-300 dark:text-slate-700">•</span>
+
+                <button
+                  onClick={() => setIsSetupModalOpen(true)}
+                  className="flex items-center gap-1 font-mono text-[11px] text-emerald-700 dark:text-emerald-400 hover:underline"
+                  title="Click to change schedule"
+                >
+                  <Clock className="w-3 h-3" />
+                  <span className="hidden sm:inline">{scheduleHumanText}</span>
+                </button>
+
+                <span className="text-slate-300 dark:text-slate-700 hidden lg:inline">•</span>
+
+                {/* DAG Health status chip */}
+                <div
+                  className={`hidden lg:flex items-center gap-1 px-2 py-0.5 rounded-md font-mono text-[10px] font-semibold border ${
+                    dagHealth.isHealthy
+                      ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
+                      : 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800'
+                  }`}
+                >
+                  {dagHealth.isHealthy ? (
+                    <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+                  ) : (
+                    <AlertCircle className="w-3 h-3 text-amber-500" />
+                  )}
+                  <span>{dagHealth.message}</span>
+                </div>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Action Controls */}
-        <div className="flex items-center gap-2.5">
-          {/* AI Runbook Architect Toggle */}
+        {/* Right Section: Usability Actions (Templates, Add Step, Auto-Layout, AI, Save, Run) */}
+        <div className="flex items-center gap-2">
+          {/* Templates Dropdown */}
+          <div className="relative">
+            <button
+              onClick={() => setIsTemplatesDropdownOpen(!isTemplatesDropdownOpen)}
+              className="px-2.5 py-1.5 bg-white hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 flex items-center gap-1.5 transition-colors shadow-sm"
+              title="Load Pre-configured Runbook Template"
+            >
+              <FolderOpen className="w-3.5 h-3.5 text-primary-500" />
+              <span className="hidden md:inline">Templates</span>
+              <ChevronDown className="w-3 h-3" />
+            </button>
+
+            {isTemplatesDropdownOpen && (
+              <div
+                className="absolute right-0 mt-1.5 w-72 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-2xl py-1 z-50 animate-in fade-in zoom-in-95 duration-150"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="px-3 py-1.5 border-b border-slate-100 dark:border-slate-800 text-[11px] font-bold uppercase text-slate-400 tracking-wider">
+                  Enterprise Starter Runbooks
+                </div>
+                {WORKFLOW_TEMPLATES.map((tmpl) => (
+                  <button
+                    key={tmpl.id}
+                    onClick={() => loadTemplate(tmpl)}
+                    className="w-full text-left px-3 py-2.5 hover:bg-slate-100 dark:hover:bg-slate-800/80 transition-colors flex flex-col gap-0.5 border-b border-slate-100 dark:border-slate-800/50 last:border-0"
+                  >
+                    <div className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                      {tmpl.name}
+                    </div>
+                    <div className="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-1">
+                      {tmpl.description}
+                    </div>
+                    <span className="text-[10px] font-mono text-primary-600 dark:text-primary-400 mt-0.5">
+                      {tmpl.steps.length} Steps • {tmpl.category}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Quick Add Step Button */}
+          <button
+            onClick={() => {
+              setQuickAddPos(null);
+              setIsQuickAddOpen(true);
+            }}
+            className="px-3 py-1.5 bg-primary-50 hover:bg-primary-100 dark:bg-primary-950/40 dark:hover:bg-primary-900/40 text-primary-700 dark:text-primary-300 text-xs font-semibold rounded-lg border border-primary-200 dark:border-primary-500/40 flex items-center gap-1.5 transition-colors shadow-sm"
+            title="Quickly search and insert a step"
+          >
+            <Plus className="w-4 h-4 text-primary-600 dark:text-primary-400" />
+            <span className="hidden sm:inline">Add Step</span>
+          </button>
+
+          {/* Auto Layout DAG Button */}
+          <button
+            onClick={handleAutoLayout}
+            className="px-2.5 py-1.5 bg-white hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 flex items-center gap-1.5 transition-colors shadow-sm"
+            title="Auto-align steps hierarchically"
+          >
+            <Wand2 className="w-3.5 h-3.5 text-indigo-500" />
+            <span className="hidden xl:inline">Auto Layout</span>
+          </button>
+
+          {/* AI Architect Toggle */}
           <button
             onClick={() => setIsAiBarOpen(!isAiBarOpen)}
-            className={`px-3 py-1.5 text-xs font-semibold rounded-lg border flex items-center gap-1.5 shadow-sm transition-all ${
+            className={`px-2.5 py-1.5 text-xs font-semibold rounded-lg border flex items-center gap-1.5 shadow-sm transition-all ${
               isAiBarOpen
                 ? 'bg-gradient-to-r from-primary-600 to-indigo-600 text-white border-primary-500 shadow-md shadow-primary-500/20'
                 : 'bg-white hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700'
             }`}
+            title="Natural language runbook generator"
           >
-            <Sparkles className={`w-3.5 h-3.5 ${isAiBarOpen ? 'text-amber-300' : 'text-primary-600 dark:text-primary-400'}`} />
-            <span>AI Architect</span>
+            <Sparkles className={`w-3.5 h-3.5 ${isAiBarOpen ? 'text-amber-300' : 'text-primary-500'}`} />
+            <span className="hidden sm:inline">AI Architect</span>
           </button>
 
+          {/* Agent Inventory Sidebar Toggle */}
           <button
             onClick={() => setIsInventoryCollapsed(!isInventoryCollapsed)}
-            className={`px-3 py-1.5 text-xs font-medium rounded-lg border flex items-center gap-1.5 transition-colors shadow-sm ${
+            className={`p-2 text-xs font-medium rounded-lg border transition-colors shadow-sm ${
               !isInventoryCollapsed
                 ? 'bg-primary-50 dark:bg-primary-600/20 text-primary-700 dark:text-primary-300 border-primary-200 dark:border-primary-500/40'
                 : 'bg-white hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700'
             }`}
+            title="Toggle Agent Dock"
           >
             <Cpu className="w-4 h-4 text-primary-600 dark:text-primary-400" />
-            <span>Agent Inventory ({nodes.length} in DAG)</span>
           </button>
 
+          {/* Shortcuts Guide Button */}
           <button
-            onClick={createDefaultCanvas}
-            title="Reset template"
-            className="p-2 bg-white hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs rounded-lg border border-slate-200 dark:border-slate-700 transition-colors shadow-sm"
+            onClick={() => setIsShortcutsOpen(true)}
+            className="p-2 bg-white hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400 rounded-lg border border-slate-200 dark:border-slate-700 transition-colors shadow-sm"
+            title="Keyboard shortcuts & gestures guide"
           >
-            <RefreshCw className="w-4 h-4" />
+            <HelpCircle className="w-4 h-4" />
           </button>
 
+          {/* Save Workflow Button */}
           <button
             onClick={handleSaveWorkflow}
             disabled={saving}
-            className="px-4 py-1.5 bg-white hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-100 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 flex items-center gap-1.5 transition-colors shadow-sm"
+            className="px-3.5 py-1.5 bg-white hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-100 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 flex items-center gap-1.5 transition-colors shadow-sm"
           >
             <Save className="w-4 h-4 text-emerald-500" />
-            {saving ? 'Saving...' : 'Save Runbook'}
+            <span>{saving ? 'Saving...' : 'Save'}</span>
           </button>
 
+          {/* Execute Now Button */}
           <button
             onClick={handleExecuteNow}
-            className="px-4 py-1.5 bg-primary-600 hover:bg-primary-500 text-white text-xs font-semibold rounded-lg flex items-center gap-1.5 shadow-lg shadow-primary-600/30 transition-all hover:scale-105"
+            className="px-3.5 py-1.5 bg-primary-600 hover:bg-primary-500 text-white text-xs font-bold rounded-lg flex items-center gap-1.5 shadow-md shadow-primary-600/30 transition-all hover:scale-105"
           >
-            <Play className="w-4 h-4 fill-white" />
-            Execute Now
+            <Play className="w-3.5 h-3.5 fill-white" />
+            <span>Run</span>
           </button>
         </div>
       </div>
+
+      {/* Save Success Banner Notification */}
+      {saveSuccessMessage && (
+        <div className="absolute top-18 right-6 z-40 bg-emerald-600 text-white px-4 py-2 rounded-xl shadow-xl flex items-center gap-2 text-xs font-semibold animate-in slide-in-from-top duration-200">
+          <CheckCircle2 className="w-4 h-4" />
+          <span>{saveSuccessMessage}</span>
+        </div>
+      )}
 
       {/* AI Runbook Prompt Bar (Natural Language ➔ DAG Generator) */}
       <AiWorkflowPromptBar
@@ -800,7 +1145,7 @@ const WorkflowCanvasInner: React.FC<WorkflowCanvasProps> = ({ workflow, onWorkfl
 
       {/* Main Canvas Area with Agent Inventory Dock */}
       <div className="flex-1 w-full h-full flex overflow-hidden relative">
-        {/* Agent Inventory Sidebar Dock (Draggable Agents Catalog) */}
+        {/* Agent Inventory Sidebar Dock */}
         <AgentInventoryPanel
           onAddAgent={(toolType) => handleAddNode(toolType)}
           isCollapsed={isInventoryCollapsed}
@@ -818,20 +1163,22 @@ const WorkflowCanvasInner: React.FC<WorkflowCanvasProps> = ({ workflow, onWorkfl
             nodes={nodes}
             edges={edges}
             onNodesChange={onNodesChange}
-            onEdgesChange={onEdgesChange}
+            onEdgesChange={handleEdgesChange}
             onConnect={onConnect}
             onNodeClick={onNodeClick}
+            onDoubleClick={onPaneDoubleClick}
             nodeTypes={nodeTypes}
+            deleteKeyCode={['Backspace', 'Delete']}
             fitView
             className={theme === 'dark' ? 'bg-slate-950' : 'bg-slate-100'}
           >
             <Background
-              variant={BackgroundVariant.Dots}
+              variant={gridVariant}
               gap={24}
               size={1.2}
               color={theme === 'dark' ? '#1e293b' : '#cbd5e1'}
             />
-            <Controls className="!bg-white dark:!bg-slate-900 !border-slate-200 dark:!border-slate-800 !text-slate-700 dark:!text-slate-300 rounded-lg overflow-hidden shadow-md" />
+            <Controls className="!bg-white dark:!bg-slate-900 !border-slate-200 dark:!border-slate-800 !text-slate-700 dark:!text-slate-300 rounded-xl overflow-hidden shadow-md" />
             <MiniMap
               nodeColor={(node) => {
                 if (node.data?.status === 'PASS') return '#10b981';
@@ -839,9 +1186,88 @@ const WorkflowCanvasInner: React.FC<WorkflowCanvasProps> = ({ workflow, onWorkfl
                 if (node.data?.status === 'RUNNING') return '#3b82f6';
                 return theme === 'dark' ? '#475569' : '#94a3b8';
               }}
-              className="!bg-white/90 dark:!bg-slate-900/90 !border-slate-200 dark:!border-slate-800 rounded-lg overflow-hidden shadow-md"
+              className="!bg-white/90 dark:!bg-slate-900/90 !border-slate-200 dark:!border-slate-800 rounded-xl overflow-hidden shadow-md"
             />
           </ReactFlow>
+
+          {/* Floating Canvas Quick Utilities Bar (Bottom Left) */}
+          <div className="absolute bottom-5 left-5 z-20 flex items-center gap-1.5 p-1 bg-white/90 dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl backdrop-blur-md">
+            <button
+              onClick={() => reactFlowInstance.zoomIn({ duration: 250 })}
+              className="p-1.5 text-slate-600 dark:text-slate-300 hover:text-primary-600 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+              title="Zoom In"
+            >
+              <ZoomIn className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => reactFlowInstance.zoomOut({ duration: 250 })}
+              className="p-1.5 text-slate-600 dark:text-slate-300 hover:text-primary-600 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+              title="Zoom Out"
+            >
+              <ZoomOut className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => reactFlowInstance.fitView({ padding: 0.25, duration: 300 })}
+              className="p-1.5 text-slate-600 dark:text-slate-300 hover:text-primary-600 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+              title="Fit to Screen"
+            >
+              <Maximize2 className="w-4 h-4" />
+            </button>
+            <div className="w-px h-4 bg-slate-200 dark:bg-slate-800 mx-0.5" />
+            <button
+              onClick={handleAutoLayout}
+              className="p-1.5 text-slate-600 dark:text-slate-300 hover:text-indigo-600 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+              title="Auto-Layout DAG"
+            >
+              <Wand2 className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() =>
+                setGridVariant((prev) =>
+                  prev === BackgroundVariant.Dots
+                    ? BackgroundVariant.Lines
+                    : prev === BackgroundVariant.Lines
+                    ? BackgroundVariant.Cross
+                    : BackgroundVariant.Dots
+                )
+              }
+              className="p-1.5 text-slate-600 dark:text-slate-300 hover:text-primary-600 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+              title="Toggle Grid Style (Dots/Lines/Cross)"
+            >
+              <LayoutGrid className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* Floating Empty Canvas Helper if No Steps */}
+          {nodes.length === 0 && (
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <div className="bg-white/95 dark:bg-slate-900/95 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-2xl text-center max-w-sm pointer-events-auto backdrop-blur-md">
+                <div className="p-3 bg-primary-50 dark:bg-primary-950/50 rounded-2xl w-fit mx-auto text-primary-600 dark:text-primary-400 mb-3 border border-primary-100 dark:border-primary-800">
+                  <Layers className="w-8 h-8" />
+                </div>
+                <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 mb-1">
+                  Compose Your Runbook
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">
+                  Drag agents from the left dock, load a starter template, or double-click anywhere to insert a step.
+                </p>
+                <div className="flex gap-2 justify-center">
+                  <button
+                    onClick={() => loadTemplate(WORKFLOW_TEMPLATES[0])}
+                    className="px-3 py-1.5 bg-primary-600 hover:bg-primary-500 text-white rounded-lg text-xs font-semibold shadow-sm transition-all"
+                  >
+                    Load Default Template
+                  </button>
+                  <button
+                    onClick={() => setIsQuickAddOpen(true)}
+                    className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-xs font-medium transition-colors"
+                  >
+                    + Add Step
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Floating Console Toggle Button */}
           {!isExecutionDrawerOpen && (
@@ -850,7 +1276,7 @@ const WorkflowCanvasInner: React.FC<WorkflowCanvasProps> = ({ workflow, onWorkfl
               className="absolute bottom-5 right-5 px-3 py-2 bg-white hover:bg-slate-100 dark:bg-slate-900 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xl flex items-center gap-2 text-xs font-medium transition-all"
             >
               <Terminal className="w-4 h-4 text-primary-500" />
-              <span>Open Stream Console</span>
+              <span>Open Execution Console</span>
               {runStatus !== 'IDLE' && (
                 <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
               )}
@@ -858,6 +1284,19 @@ const WorkflowCanvasInner: React.FC<WorkflowCanvasProps> = ({ workflow, onWorkfl
           )}
         </div>
       </div>
+
+      {/* Quick Add Step Modal */}
+      <QuickAddStepModal
+        isOpen={isQuickAddOpen}
+        onClose={() => setIsQuickAddOpen(false)}
+        onSelectTool={(toolType) => handleAddNode(toolType, quickAddPos || undefined)}
+      />
+
+      {/* Workflow Keyboard Shortcuts / Help Modal */}
+      <WorkflowShortcutsModal
+        isOpen={isShortcutsOpen}
+        onClose={() => setIsShortcutsOpen(false)}
+      />
 
       {/* Workflow Setup Modal */}
       <WorkflowSetupModal
@@ -882,7 +1321,7 @@ const WorkflowCanvasInner: React.FC<WorkflowCanvasProps> = ({ workflow, onWorkfl
         isOpen={isDrawerOpen}
         onClose={() => setIsDrawerOpen(false)}
         onSave={handleSaveStep}
-        onDelete={handleDeleteStep}
+        onDelete={handleDeleteNode}
       />
 
       {/* Live SignalR Execution Drawer */}

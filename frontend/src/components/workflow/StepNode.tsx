@@ -15,6 +15,12 @@ import {
   AlertTriangle,
   Clock,
   ShieldAlert,
+  Settings,
+  Copy,
+  Trash2,
+  Server,
+  ArrowDown,
+  ArrowRight,
 } from 'lucide-react';
 import { ToolType } from '@/types';
 
@@ -31,28 +37,106 @@ export interface StepNodeData extends Record<string, any> {
   metricValue?: string;
   durationMs?: number;
   errorMessage?: string | null;
-  onSelect?: () => void;
+  onConfigure?: (stepKey: string) => void;
+  onDuplicate?: (stepKey: string) => void;
+  onDelete?: (stepKey: string) => void;
 }
 
 const getToolInfo = (type: ToolType) => {
   switch (type) {
     case 'DISK_CHECK':
-      return { label: 'Disk Space Check', icon: HardDrive, color: 'text-cyan-700 dark:text-cyan-400', badgeBg: 'bg-cyan-100 dark:bg-cyan-950/60 border-cyan-300 dark:border-cyan-500/30' };
+      return {
+        label: 'Disk Space Check',
+        icon: HardDrive,
+        color: 'text-cyan-700 dark:text-cyan-400',
+        badgeBg: 'bg-cyan-100 dark:bg-cyan-950/60 border-cyan-300 dark:border-cyan-500/30',
+        borderAccent: 'border-cyan-500/40',
+      };
     case 'RDP_PORT_CHECK':
-      return { label: 'RDP Port 3389 Handshake', icon: ShieldCheck, color: 'text-indigo-700 dark:text-indigo-400', badgeBg: 'bg-indigo-100 dark:bg-indigo-950/60 border-indigo-300 dark:border-indigo-500/30' };
+      return {
+        label: 'RDP Port 3389 Handshake',
+        icon: ShieldCheck,
+        color: 'text-indigo-700 dark:text-indigo-400',
+        badgeBg: 'bg-indigo-100 dark:bg-indigo-950/60 border-indigo-300 dark:border-indigo-500/30',
+        borderAccent: 'border-indigo-500/40',
+      };
     case 'SQL_JOB_CHECK':
-      return { label: 'SQL Server Job Audit', icon: Database, color: 'text-amber-700 dark:text-amber-400', badgeBg: 'bg-amber-100 dark:bg-amber-950/60 border-amber-300 dark:border-amber-500/30' };
+      return {
+        label: 'SQL Server Job Audit',
+        icon: Database,
+        color: 'text-amber-700 dark:text-amber-400',
+        badgeBg: 'bg-amber-100 dark:bg-amber-950/60 border-amber-300 dark:border-amber-500/30',
+        borderAccent: 'border-amber-500/40',
+      };
     case 'URL_CHECK_EXT':
-      return { label: 'External HTTPS Probe', icon: Globe, color: 'text-emerald-700 dark:text-emerald-400', badgeBg: 'bg-emerald-100 dark:bg-emerald-950/60 border-emerald-300 dark:border-emerald-500/30' };
+      return {
+        label: 'External HTTPS Probe',
+        icon: Globe,
+        color: 'text-emerald-700 dark:text-emerald-400',
+        badgeBg: 'bg-emerald-100 dark:bg-emerald-950/60 border-emerald-300 dark:border-emerald-500/30',
+        borderAccent: 'border-emerald-500/40',
+      };
     case 'URL_CHECK_INT':
-      return { label: 'Internal URL Probe', icon: Activity, color: 'text-teal-700 dark:text-teal-400', badgeBg: 'bg-teal-100 dark:bg-teal-950/60 border-teal-300 dark:border-teal-500/30' };
+      return {
+        label: 'Internal URL Probe',
+        icon: Activity,
+        color: 'text-teal-700 dark:text-teal-400',
+        badgeBg: 'bg-teal-100 dark:bg-teal-950/60 border-teal-300 dark:border-teal-500/30',
+        borderAccent: 'border-teal-500/40',
+      };
     case 'SERVICE_ACTION':
-      return { label: 'Windows Service Action', icon: Terminal, color: 'text-purple-700 dark:text-purple-400', badgeBg: 'bg-purple-100 dark:bg-purple-950/60 border-purple-300 dark:border-purple-500/30' };
+      return {
+        label: 'Windows Service Action',
+        icon: Terminal,
+        color: 'text-purple-700 dark:text-purple-400',
+        badgeBg: 'bg-purple-100 dark:bg-purple-950/60 border-purple-300 dark:border-purple-500/30',
+        borderAccent: 'border-purple-500/40',
+      };
     case 'VOICE_CALL_ACTION':
-      return { label: 'Telephony Voice Alert (PIC)', icon: PhoneCall, color: 'text-rose-700 dark:text-rose-400', badgeBg: 'bg-rose-100 dark:bg-rose-950/60 border-rose-300 dark:border-rose-500/30' };
+      return {
+        label: 'Telephony Voice Alert (PIC)',
+        icon: PhoneCall,
+        color: 'text-rose-700 dark:text-rose-400',
+        badgeBg: 'bg-rose-100 dark:bg-rose-950/60 border-rose-300 dark:border-rose-500/30',
+        borderAccent: 'border-rose-500/40',
+      };
     default:
-      return { label: 'Custom Diagnostic', icon: Activity, color: 'text-slate-700 dark:text-slate-400', badgeBg: 'bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-700' };
+      return {
+        label: 'Custom Diagnostic',
+        icon: Activity,
+        color: 'text-slate-700 dark:text-slate-400',
+        badgeBg: 'bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-700',
+        borderAccent: 'border-slate-500/40',
+      };
   }
+};
+
+const extractParameterSummary = (toolType: ToolType, jsonStr?: string): string | null => {
+  if (!jsonStr) return null;
+  try {
+    const p = JSON.parse(jsonStr);
+    if (toolType === 'DISK_CHECK') {
+      return `Drive ${p.drive || 'C:'} (threshold < ${p.thresholdPercentFree || 15}%)`;
+    }
+    if (toolType === 'RDP_PORT_CHECK') {
+      return `Port ${p.port || 3389}`;
+    }
+    if (toolType === 'SQL_JOB_CHECK') {
+      return `Job: ${p.jobName || 'Audit'}`;
+    }
+    if (toolType === 'URL_CHECK_EXT' || toolType === 'URL_CHECK_INT') {
+      return p.url ? `${p.url.replace(/^https?:\/\//, '')}` : null;
+    }
+    if (toolType === 'SERVICE_ACTION') {
+      return `${p.action || 'Query'} ${p.serviceName || 'Service'}`;
+    }
+    if (toolType === 'VOICE_CALL_ACTION') {
+      return p.picName ? `Call: ${p.picName}` : (p.recipientPhone ? `Call: ${p.recipientPhone}` : null);
+    }
+  } catch {
+    return null;
+  }
+  return null;
 };
 
 export type StepNodeType = Node<StepNodeData, 'stepNode'>;
@@ -62,35 +146,36 @@ export const StepNode = memo(({ data, selected }: NodeProps<any>) => {
   const tool = getToolInfo(stepData.toolType);
   const Icon = tool.icon;
   const status = stepData.status || 'IDLE';
+  const paramSummary = extractParameterSummary(stepData.toolType, stepData.parametersJson);
 
-  let borderStyle = 'dark:border-slate-800 border-slate-300 dark:bg-slate-900/90 bg-white/95 shadow-md';
+  let borderStyle = 'border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 shadow-md hover:shadow-lg';
   let statusBadge = null;
 
   if (status === 'RUNNING') {
-    borderStyle = 'border-blue-500 dark:bg-blue-950/40 bg-blue-50/80 ring-2 ring-blue-500/50 shadow-lg shadow-blue-500/30 animate-pulse';
+    borderStyle = 'border-blue-500 dark:bg-blue-950/40 bg-blue-50/90 ring-2 ring-blue-500/50 shadow-lg shadow-blue-500/20';
     statusBadge = (
-      <span className="flex items-center gap-1 text-[11px] font-mono px-2 py-0.5 rounded-full dark:bg-blue-500/20 bg-blue-100 dark:text-blue-300 text-blue-700 border border-blue-500/40 animate-pulse">
+      <span className="flex items-center gap-1 text-[11px] font-mono px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-300 border border-blue-500/40 animate-pulse">
         <Clock className="w-3 h-3 animate-spin" /> RUNNING
       </span>
     );
   } else if (status === 'PASS') {
-    borderStyle = 'dark:border-emerald-500/80 border-emerald-400 dark:bg-emerald-950/20 bg-emerald-50/60 ring-1 ring-emerald-500/40 shadow-lg shadow-emerald-500/20';
+    borderStyle = 'border-emerald-400 dark:border-emerald-500/70 bg-emerald-50/70 dark:bg-emerald-950/25 ring-1 ring-emerald-500/40 shadow-lg shadow-emerald-500/15';
     statusBadge = (
-      <span className="flex items-center gap-1 text-[11px] font-mono px-2 py-0.5 rounded-full dark:bg-emerald-500/20 bg-emerald-100 dark:text-emerald-300 text-emerald-800 border border-emerald-500/40">
+      <span className="flex items-center gap-1 text-[11px] font-mono px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-500/20 text-emerald-800 dark:text-emerald-300 border border-emerald-500/40">
         <CheckCircle2 className="w-3 h-3 text-emerald-500" /> PASS
       </span>
     );
   } else if (status === 'FAIL') {
-    borderStyle = 'border-rose-500 dark:bg-rose-950/30 bg-rose-50/80 ring-2 ring-rose-500/60 shadow-lg shadow-rose-500/25';
+    borderStyle = 'border-rose-400 dark:border-rose-500/70 bg-rose-50/80 dark:bg-rose-950/30 ring-2 ring-rose-500/50 shadow-lg shadow-rose-500/20';
     statusBadge = (
-      <span className="flex items-center gap-1 text-[11px] font-mono px-2 py-0.5 rounded-full dark:bg-rose-500/20 bg-rose-100 dark:text-rose-300 text-rose-800 border border-rose-500/40">
+      <span className="flex items-center gap-1 text-[11px] font-mono px-2 py-0.5 rounded-full bg-rose-100 dark:bg-rose-500/20 text-rose-800 dark:text-rose-300 border border-rose-500/40">
         <XCircle className="w-3 h-3 text-rose-500" /> FAIL
       </span>
     );
   } else if (status === 'ERROR') {
-    borderStyle = 'border-amber-500 dark:bg-amber-950/30 bg-amber-50/80 ring-1 ring-amber-500/40 shadow-lg shadow-amber-500/20';
+    borderStyle = 'border-amber-400 dark:border-amber-500/70 bg-amber-50/80 dark:bg-amber-950/30 ring-1 ring-amber-500/40 shadow-lg shadow-amber-500/20';
     statusBadge = (
-      <span className="flex items-center gap-1 text-[11px] font-mono px-2 py-0.5 rounded-full dark:bg-amber-500/20 bg-amber-100 dark:text-amber-300 text-amber-800 border border-amber-500/40">
+      <span className="flex items-center gap-1 text-[11px] font-mono px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-500/20 text-amber-800 dark:text-amber-300 border border-amber-500/40">
         <AlertTriangle className="w-3 h-3 text-amber-500" /> ERROR
       </span>
     );
@@ -98,54 +183,108 @@ export const StepNode = memo(({ data, selected }: NodeProps<any>) => {
 
   return (
     <div
-      className={`min-w-[280px] max-w-[340px] rounded-xl border p-4 backdrop-blur-md transition-all duration-200 ${borderStyle} ${
-        selected ? 'ring-2 ring-primary-500' : ''
+      className={`group relative min-w-[290px] max-w-[340px] rounded-2xl border p-4 backdrop-blur-md transition-all duration-200 select-none ${borderStyle} ${
+        selected ? 'ring-2 ring-primary-500 ring-offset-2 ring-offset-slate-50 dark:ring-offset-slate-950 shadow-xl' : ''
       }`}
     >
-      {/* Incoming Connection Handle */}
+      {/* Top Handle with Visual Label */}
+      <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-20 flex items-center justify-center">
+        <span className="text-[9px] font-bold tracking-wider font-mono uppercase bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-1.5 py-0.5 rounded-full border border-slate-300 dark:border-slate-700 shadow-sm pointer-events-none">
+          ENTRY
+        </span>
+      </div>
       <Handle
         type="target"
         position={Position.Top}
-        className="w-3 h-3 dark:!bg-slate-400 !bg-slate-600 border-2 dark:!border-slate-900 !border-white rounded-full hover:!scale-125 transition-transform"
+        className="w-3.5 h-3.5 !bg-slate-600 dark:!bg-slate-300 border-2 !border-white dark:!border-slate-900 rounded-full hover:!scale-150 transition-transform shadow-md"
       />
 
-      {/* Header */}
-      <div className="flex items-start justify-between gap-2 mb-2.5">
-        <div className="flex items-center gap-2">
-          <div className={`p-2 rounded-lg border ${tool.badgeBg}`}>
-            <Icon className={`w-4 h-4 ${tool.color}`} />
-          </div>
-          <div>
-            <div className="text-[11px] font-medium tracking-wider uppercase dark:text-slate-400 text-slate-500">
-              {stepData.toolType}
-            </div>
-            <div className="font-semibold dark:text-slate-100 text-slate-900 text-sm tracking-tight truncate max-w-[150px]" title={stepData.stepKey}>
-              {stepData.stepKey}
-            </div>
-          </div>
-        </div>
-        {statusBadge}
+      {/* Quick Action Overlay (Shown on hover or when selected) */}
+      <div className="absolute top-2.5 right-2.5 flex items-center gap-1 opacity-80 group-hover:opacity-100 transition-opacity bg-white/90 dark:bg-slate-900/90 rounded-lg p-0.5 border border-slate-200 dark:border-slate-800 shadow-sm">
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            if (stepData.onConfigure) stepData.onConfigure(stepData.stepKey);
+          }}
+          title="Configure Step Settings"
+          className="p-1 text-slate-500 hover:text-primary-600 dark:text-slate-400 dark:hover:text-primary-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded transition-colors"
+        >
+          <Settings className="w-3.5 h-3.5" />
+        </button>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            if (stepData.onDuplicate) stepData.onDuplicate(stepData.stepKey);
+          }}
+          title="Duplicate Step"
+          className="p-1 text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded transition-colors"
+        >
+          <Copy className="w-3.5 h-3.5" />
+        </button>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            if (stepData.onDelete) stepData.onDelete(stepData.stepKey);
+          }}
+          title="Delete Step"
+          className="p-1 text-slate-500 hover:text-rose-600 dark:text-slate-400 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded transition-colors"
+        >
+          <Trash2 className="w-3.5 h-3.5" />
+        </button>
       </div>
 
-      {/* Target Host */}
-      <div className="mt-2 py-1 px-2.5 rounded dark:bg-slate-950/60 bg-slate-100 dark:border-slate-800/80 border-slate-200 flex items-center justify-between text-xs">
-        <span className="dark:text-slate-400 text-slate-500 text-[11px]">Target:</span>
-        <span className="font-mono dark:text-slate-200 text-slate-800 font-medium truncate max-w-[170px]" title={stepData.targetHost ?? 'localhost'}>
+      {/* Header */}
+      <div className="flex items-start gap-2.5 pr-20 mb-2.5">
+        <div className={`p-2 rounded-xl border shadow-sm shrink-0 ${tool.badgeBg}`}>
+          <Icon className={`w-4 h-4 ${tool.color}`} />
+        </div>
+        <div className="min-w-0">
+          <div className="text-[10px] font-bold tracking-wider uppercase text-slate-500 dark:text-slate-400 truncate">
+            {tool.label}
+          </div>
+          <div
+            className="font-mono font-semibold text-slate-900 dark:text-slate-100 text-xs tracking-tight truncate"
+            title={stepData.stepKey}
+          >
+            {stepData.stepKey}
+          </div>
+        </div>
+      </div>
+
+      {/* Status Badge (if executed or running) */}
+      {statusBadge && <div className="mb-2.5">{statusBadge}</div>}
+
+      {/* Target Host Details */}
+      <div className="py-1 px-2.5 rounded-lg bg-slate-100/90 dark:bg-slate-950/70 border border-slate-200/80 dark:border-slate-800/80 flex items-center justify-between text-xs">
+        <span className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1 font-medium">
+          <Server className="w-3 h-3 text-slate-400" /> Target:
+        </span>
+        <span
+          className="font-mono text-slate-800 dark:text-slate-200 font-semibold truncate max-w-[170px]"
+          title={stepData.targetHost ?? 'localhost'}
+        >
           {stepData.targetHost ?? 'localhost'}
         </span>
       </div>
 
-      {/* Metric Value or Error */}
+      {/* Parameter preview if available */}
+      {paramSummary && (
+        <div className="mt-1.5 py-0.5 px-2 rounded bg-slate-50 dark:bg-slate-900/60 border border-slate-200/50 dark:border-slate-800/50 text-[11px] text-slate-600 dark:text-slate-400 font-mono truncate">
+          {paramSummary}
+        </div>
+      )}
+
+      {/* Metric Value on execution */}
       {stepData.metricValue && (
-        <div className="mt-2 px-2.5 py-1.5 rounded-lg dark:bg-slate-950/90 bg-slate-100/80 dark:border-slate-800 border-slate-200 flex items-center justify-between">
-          <span className="text-[11px] dark:text-slate-400 text-slate-500">Metric:</span>
+        <div className="mt-2 px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-950/90 border border-slate-200 dark:border-slate-800 flex items-center justify-between">
+          <span className="text-[11px] text-slate-500 dark:text-slate-400">Metric:</span>
           <span
             className={`font-mono text-xs font-semibold truncate max-w-[180px] ${
               status === 'PASS'
-                ? 'dark:text-emerald-300 text-emerald-700'
+                ? 'text-emerald-700 dark:text-emerald-300'
                 : status === 'FAIL'
-                ? 'dark:text-rose-300 text-rose-700'
-                : 'dark:text-slate-200 text-slate-800'
+                ? 'text-rose-700 dark:text-rose-300'
+                : 'text-slate-800 dark:text-slate-200'
             }`}
           >
             {stepData.metricValue}
@@ -153,48 +292,60 @@ export const StepNode = memo(({ data, selected }: NodeProps<any>) => {
         </div>
       )}
 
+      {/* Error message if failed */}
       {stepData.errorMessage && (
-        <div className="mt-2 p-2 rounded dark:bg-rose-950/40 bg-rose-100 dark:border-rose-900/50 border-rose-200 text-[11px] dark:text-rose-300 text-rose-800 flex items-start gap-1.5">
+        <div className="mt-2 p-2 rounded-lg bg-rose-100 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/50 text-[11px] text-rose-800 dark:text-rose-300 flex items-start gap-1.5">
           <ShieldAlert className="w-3.5 h-3.5 text-rose-500 shrink-0 mt-0.5" />
           <span className="line-clamp-2">{stepData.errorMessage}</span>
         </div>
       )}
 
-      {/* Branching Output Handles */}
-      <div className="mt-4 pt-2.5 dark:border-slate-800/80 border-slate-200 border-t flex items-center justify-between text-[11px]">
+      {/* Branching Output Connection Info */}
+      <div className="mt-3.5 pt-2.5 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between text-[11px]">
         {/* On Success Branch */}
-        <div className="flex items-center gap-1.5 dark:text-emerald-400 text-emerald-600 font-medium">
+        <div className="flex items-center gap-1 text-emerald-700 dark:text-emerald-400 font-medium">
           <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/50" />
           <span>Pass:</span>
-          <span className="font-mono text-[10px] dark:text-slate-400 text-slate-500 truncate max-w-[65px]">
+          <span className="font-mono text-[10px] text-slate-500 dark:text-slate-400 truncate max-w-[70px]">
             {stepData.onSuccessStepKey || 'END'}
           </span>
         </div>
 
         {/* On Failure Branch */}
-        <div className="flex items-center gap-1.5 dark:text-rose-400 text-rose-600 font-medium">
+        <div className="flex items-center gap-1 text-rose-700 dark:text-rose-400 font-medium">
           <div className="w-2 h-2 rounded-full bg-rose-500 shadow-sm shadow-rose-500/50" />
           <span>Fail:</span>
-          <span className="font-mono text-[10px] dark:text-slate-400 text-slate-500 truncate max-w-[65px]">
+          <span className="font-mono text-[10px] text-slate-500 dark:text-slate-400 truncate max-w-[70px]">
             {stepData.onFailureStepKey || 'END'}
           </span>
         </div>
       </div>
 
-      {/* Outgoing Handles */}
+      {/* Bottom Outgoing Handles with Visual Badges */}
+      <div className="absolute -bottom-3 left-[25%] -translate-x-1/2 z-20 flex items-center justify-center">
+        <span className="text-[9px] font-bold tracking-wider font-mono uppercase bg-emerald-600 text-white px-1.5 py-0.5 rounded-full shadow-md pointer-events-none flex items-center gap-0.5">
+          PASS <ArrowDown className="w-2 h-2" />
+        </span>
+      </div>
       <Handle
         type="source"
         position={Position.Bottom}
         id="success"
         style={{ left: '25%' }}
-        className="w-3.5 h-3.5 !bg-emerald-500 border-2 dark:!border-slate-900 !border-white rounded-full hover:!scale-125 transition-transform"
+        className="w-3.5 h-3.5 !bg-emerald-500 border-2 !border-white dark:!border-slate-900 rounded-full hover:!scale-150 transition-transform shadow-md"
       />
+
+      <div className="absolute -bottom-3 left-[75%] -translate-x-1/2 z-20 flex items-center justify-center">
+        <span className="text-[9px] font-bold tracking-wider font-mono uppercase bg-rose-600 text-white px-1.5 py-0.5 rounded-full shadow-md pointer-events-none flex items-center gap-0.5">
+          FAIL <ArrowDown className="w-2 h-2" />
+        </span>
+      </div>
       <Handle
         type="source"
         position={Position.Bottom}
         id="failure"
         style={{ left: '75%' }}
-        className="w-3.5 h-3.5 !bg-rose-500 border-2 dark:!border-slate-900 !border-white rounded-full hover:!scale-125 transition-transform"
+        className="w-3.5 h-3.5 !bg-rose-500 border-2 !border-white dark:!border-slate-900 rounded-full hover:!scale-150 transition-transform shadow-md"
       />
     </div>
   );
