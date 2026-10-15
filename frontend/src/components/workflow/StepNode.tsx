@@ -21,6 +21,7 @@ import {
   Server,
   ArrowDown,
   ArrowRight,
+  SearchCode,
 } from 'lucide-react';
 import { ToolType } from '@/types';
 
@@ -100,6 +101,14 @@ const getToolInfo = (type: ToolType) => {
         badgeBg: 'bg-rose-100 dark:bg-rose-950/60 border-rose-300 dark:border-rose-500/30',
         borderAccent: 'border-rose-500/40',
       };
+    case 'WEB_SCRAPER':
+      return {
+        label: 'Web Scraper & DOM Inspector',
+        icon: SearchCode,
+        color: 'text-violet-700 dark:text-violet-400',
+        badgeBg: 'bg-violet-100 dark:bg-violet-950/60 border-violet-300 dark:border-violet-500/30',
+        borderAccent: 'border-violet-500/40',
+      };
     default:
       return {
         label: 'Custom Diagnostic',
@@ -132,6 +141,9 @@ const extractParameterSummary = (toolType: ToolType, jsonStr?: string): string |
     }
     if (toolType === 'VOICE_CALL_ACTION') {
       return p.picName ? `Call: ${p.picName}` : (p.recipientPhone ? `Call: ${p.recipientPhone}` : null);
+    }
+    if (toolType === 'WEB_SCRAPER') {
+      return `Scrape: ${p.selector || 'DOM'} (${p.condition || 'NOT_EMPTY'})`;
     }
   } catch {
     return null;
@@ -193,7 +205,7 @@ export const StepNode = memo(({ data, selected }: NodeProps<any>) => {
         position={Position.Top}
         id="target"
         title="Input: Connect previous step's PASS or FAIL here"
-        className="!w-4 !h-4 !bg-blue-600 dark:!bg-blue-500 border-2 !border-slate-900 dark:!border-white rounded-full shadow-lg hover:!scale-150 transition-transform !cursor-crosshair z-30"
+        className="!w-4 !h-4 !bg-blue-600 dark:!bg-blue-500 border-2 !border-blue-900 dark:!border-blue-950 ring-2 ring-blue-400/80 rounded-full shadow-lg hover:!scale-150 transition-transform !cursor-crosshair z-30"
       />
 
       {/* Quick Action Overlay (Shown on hover or when selected) */}
@@ -327,7 +339,7 @@ export const StepNode = memo(({ data, selected }: NodeProps<any>) => {
         id="success"
         style={{ left: '25%' }}
         title="PASS: Drag from here to connect the next step on SUCCESS"
-        className="!w-4 !h-4 !bg-emerald-500 dark:!bg-emerald-400 border-2 !border-slate-900 dark:!border-white rounded-full shadow-lg hover:!scale-150 transition-transform !cursor-crosshair z-30"
+        className="!w-4 !h-4 !bg-emerald-600 dark:!bg-emerald-500 border-2 !border-emerald-900 dark:!border-emerald-950 ring-2 ring-emerald-400/80 rounded-full shadow-lg hover:!scale-150 transition-transform !cursor-crosshair z-30"
       />
 
       <Handle
@@ -336,7 +348,7 @@ export const StepNode = memo(({ data, selected }: NodeProps<any>) => {
         id="failure"
         style={{ left: '75%' }}
         title="FAIL: Drag from here to connect the next step on FAILURE / ESCALATION"
-        className="!w-4 !h-4 !bg-rose-500 dark:!bg-rose-400 border-2 !border-slate-900 dark:!border-white rounded-full shadow-lg hover:!scale-150 transition-transform !cursor-crosshair z-30"
+        className="!w-4 !h-4 !bg-rose-600 dark:!bg-rose-500 border-2 !border-rose-900 dark:!border-rose-950 ring-2 ring-rose-400/80 rounded-full shadow-lg hover:!scale-150 transition-transform !cursor-crosshair z-30"
       />
     </div>
   );

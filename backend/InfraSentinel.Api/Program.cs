@@ -39,6 +39,7 @@ builder.Services.AddScoped<IToolExecutor, ExternalUrlCheckTool>();
 builder.Services.AddScoped<IToolExecutor, InternalUrlCheckTool>();
 builder.Services.AddScoped<IToolExecutor, ServiceActionTool>();
 builder.Services.AddScoped<IToolExecutor, VoiceCallActionTool>();
+builder.Services.AddScoped<IToolExecutor, WebScraperTool>();
 
 // 5. DAG Execution Engine
 builder.Services.AddScoped<IDagExecutionEngine, DagExecutionEngine>();

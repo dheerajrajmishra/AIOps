@@ -21,6 +21,7 @@ import {
   ChevronRight,
   X,
   ExternalLink,
+  SearchCode,
 } from 'lucide-react';
 import { AGENT_INVENTORY, AgentInventoryItem, getAgentInventoryItem } from '@/lib/agentInventory';
 import { ToolType } from '@/types';
@@ -47,6 +48,8 @@ const getAgentIcon = (toolType: ToolType) => {
       return Terminal;
     case 'VOICE_CALL_ACTION':
       return PhoneCall;
+    case 'WEB_SCRAPER':
+      return SearchCode;
     default:
       return Cpu;
   }

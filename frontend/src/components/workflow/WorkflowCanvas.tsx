@@ -696,26 +696,113 @@ const WorkflowCanvasInner: React.FC<WorkflowCanvasProps> = ({ workflow, onWorkfl
   );
 
   const handleSaveStep = (updated: WorkflowStep) => {
+    const originalKey = selectedStep?.stepKey || selectedStep?.id || updated.stepKey;
+    const newKey = (updated.stepKey || originalKey).trim();
+
+    // 1. Update Nodes: update stepKey, toolType, targetHost, parametersJson, branch keys, timeouts
     setNodes((nds) =>
       nds.map((node) => {
-        if (node.id === updated.stepKey || node.data.stepKey === updated.stepKey) {
+        const isTarget = node.id === originalKey || node.data.stepKey === originalKey || node.id === updated.stepKey;
+        if (isTarget) {
           return {
             ...node,
+            id: newKey,
             data: {
               ...node.data,
+              stepKey: newKey,
+              toolType: updated.toolType,
               targetHost: updated.targetHost,
               parametersJson: updated.parametersJson,
-              onSuccessStepKey: updated.onSuccessStepKey,
-              onFailureStepKey: updated.onFailureStepKey,
-              timeoutSeconds: updated.timeoutSeconds,
-              retryCount: updated.retryCount,
+              onSuccessStepKey: updated.onSuccessStepKey || 'END',
+              onFailureStepKey: updated.onFailureStepKey || 'END',
+              timeoutSeconds: updated.timeoutSeconds || 30,
+              retryCount: updated.retryCount || 1,
             },
           };
         }
+
+        // If another node referenced the old stepKey, update its branch targets
+        if (originalKey !== newKey) {
+          const updatedData = { ...node.data };
+          let changed = false;
+          if (updatedData.onSuccessStepKey === originalKey) {
+            updatedData.onSuccessStepKey = newKey;
+            changed = true;
+          }
+          if (updatedData.onFailureStepKey === originalKey) {
+            updatedData.onFailureStepKey = newKey;
+            changed = true;
+          }
+          if (changed) {
+            return { ...node, data: updatedData };
+          }
+        }
+
         return node;
       })
     );
+
+    // 2. Synchronize Edges (Canvas Connections) immediately so the visual impact is instant!
+    setEdges((prevEdges) => {
+      // Remove old outgoing edges from this node
+      let nextEdges = prevEdges.filter(
+        (e) => e.source !== originalKey && e.source !== newKey
+      );
+
+      // If key renamed, update any incoming edges pointing to this node
+      if (originalKey !== newKey) {
+        nextEdges = nextEdges.map((e) => {
+          if (e.target === originalKey) {
+            return { ...e, target: newKey };
+          }
+          return e;
+        });
+      }
+
+      // Add fresh PASS / Success Edge if specified and not 'END'
+      if (updated.onSuccessStepKey && updated.onSuccessStepKey !== 'END') {
+        nextEdges.push({
+          id: `edge_success_${newKey}_${updated.onSuccessStepKey}`,
+          source: newKey,
+          target: updated.onSuccessStepKey,
+          sourceHandle: 'success',
+          targetHandle: 'target',
+          animated: true,
+          style: { stroke: '#10b981', strokeWidth: 2.5 },
+          markerEnd: { type: MarkerType.ArrowClosed, color: '#10b981' },
+          label: 'PASS',
+          labelStyle: { fill: '#10b981', fontWeight: 700, fontSize: 10 },
+          labelBgStyle: { fill: theme === 'dark' ? '#064e3b' : '#ecfdf5', fillOpacity: 0.9 },
+        });
+      }
+
+      // Add fresh FAIL / Failure Edge if specified and not 'END'
+      if (updated.onFailureStepKey && updated.onFailureStepKey !== 'END') {
+        nextEdges.push({
+          id: `edge_failure_${newKey}_${updated.onFailureStepKey}`,
+          source: newKey,
+          target: updated.onFailureStepKey,
+          sourceHandle: 'failure',
+          targetHandle: 'target',
+          animated: true,
+          style: { stroke: '#f43f5e', strokeWidth: 2.5, strokeDasharray: '5,5' },
+          markerEnd: { type: MarkerType.ArrowClosed, color: '#f43f5e' },
+          label: 'FAIL / PIC',
+          labelStyle: { fill: '#f43f5e', fontWeight: 700, fontSize: 10 },
+          labelBgStyle: { fill: theme === 'dark' ? '#881337' : '#fff1f2', fillOpacity: 0.9 },
+        });
+      }
+
+      return nextEdges;
+    });
+
+    // 3. Reset selected step and close drawer
+    setSelectedStep(null);
     setIsDrawerOpen(false);
+
+    // 4. Instant visual confirmation notification
+    setSaveSuccessMessage(`Step '${newKey}' updated successfully!`);
+    setTimeout(() => setSaveSuccessMessage(null), 3000);
   };
 
   const handleSaveWorkflow = async () => {

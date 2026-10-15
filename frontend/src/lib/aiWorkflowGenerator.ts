@@ -86,16 +86,18 @@ export function generateWorkflowFromNaturalLanguage(prompt: string): GeneratedWo
   const threshold = thresholdMatch ? parseInt(thresholdMatch[1], 10) : 15;
 
   // 3. Extract Tools needed
+  const needsScraper = p.includes('scrap') || p.includes('dom') || p.includes('extract') || p.includes('xpath') || p.includes('css selector') || p.includes('html content');
   const needsDisk = p.includes('disk') || p.includes('storage') || p.includes('drive') || p.includes('space') || p.includes('capacity');
   const needsRdp = p.includes('rdp') || p.includes('3389') || p.includes('port') || p.includes('perimeter') || p.includes('handshake');
   const needsSql = p.includes('sql') || p.includes('database') || p.includes('cluster') || p.includes('db-') || p.includes('backup');
-  const needsExtUrl = p.includes('http') || p.includes('https') || p.includes('external') || p.includes('api.') || p.includes('website') || p.includes('gateway');
+  const needsExtUrl = !needsScraper && (p.includes('http') || p.includes('https') || p.includes('external') || p.includes('api.') || p.includes('website') || p.includes('gateway'));
   const needsIntUrl = p.includes('internal') || p.includes('intranet') || p.includes('microservice') || p.includes('localhost');
   const needsService = p.includes('service') || p.includes('restart') || p.includes('daemon') || p.includes('self-healing') || p.includes('remediation');
   const needsVoice = p.includes('voice') || p.includes('call') || p.includes('phone') || p.includes('pic') || p.includes('escalat') || p.includes('alert pic') || p.includes('emergency');
 
   // Fallback if no specific keyword matched
   const activeToolTypes: ToolType[] = [];
+  if (needsScraper) activeToolTypes.push('WEB_SCRAPER');
   if (needsDisk) activeToolTypes.push('DISK_CHECK');
   if (needsRdp) activeToolTypes.push('RDP_PORT_CHECK');
   if (needsSql) activeToolTypes.push('SQL_JOB_CHECK');

@@ -5,7 +5,8 @@ export type ToolType =
   | 'URL_CHECK_EXT'
   | 'URL_CHECK_INT'
   | 'SERVICE_ACTION'
-  | 'VOICE_CALL_ACTION';
+  | 'VOICE_CALL_ACTION'
+  | 'WEB_SCRAPER';
 
 export interface WorkflowStep {
   id: string;

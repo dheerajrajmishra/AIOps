@@ -26,15 +26,48 @@ body {
   transition: background-color 0.2s ease, color 0.2s ease;
 }
 
-/* React Flow styling overrides */
+/* React Flow styling overrides & Handle theming */
+.react-flow {
+  --xy-handle-border-color-default: #1e293b;
+  --xy-handle-border-color: #1e293b;
+  --xy-handle-background-color-default: #3b82f6;
+  --xy-handle-background-color: #3b82f6;
+}
+
 .react-flow__handle {
-  width: 10px;
-  height: 10px;
+  width: 12px;
+  height: 12px;
   border-radius: 50%;
+  border-color: #1e293b !important;
 }
 
 .react-flow__edge-path {
-  stroke-width: 2;
+  stroke-width: 2.5;
+}
+
+/* Custom Colored Hand Cursor for React Flow Canvas (replaces default white OS hand) */
+/* Uses Base64 SVG with 32x32 Base64 PNG fallback to ensure non-white hand on all browsers & display DPIs */
+.react-flow__pane,
+.react-flow__pane.draggable,
+.cursor-grab {
+  cursor: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIzMiIgaGVpZ2h0PSIzMiIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSIjNjM2NmYxIiBzdHJva2U9IiMxZTFiNGIiIHN0cm9rZS13aWR0aD0iMS41IiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPgogIDxwYXRoIGQ9Ik0xOCAxMVY2YTIgMiAwIDAgMC0yLTJ2MGEyIDIgMCAwIDAtMiAydjAiLz4KICA8cGF0aCBkPSJNMTQgMTBWNGEyIDIgMCAwIDAtMi0ydjBhMiAyIDAgMCAwLTIgMnYyIi8+CiAgPHBhdGggZD0iTTEwIDEwLjVWNmEyIDIgMCAwIDAtMi0ydjBhMiAyIDAgMCAwLTIgMnY4Ii8+CiAgPHBhdGggZD0iTTE4IDhhMiAyIDAgMSAxIDQgMHY2YTggOCAwIDAgMS04IDhoLTJjLTIuOCAwLTQuNS0uODYtNS45OS0yLjM0bC0zLjYtMy42YTIgMiAwIDAgMSAyLjgzLTIuODJMNyAxNSIvPgo8L3N2Zz4=") 10 10,
+          url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAlklEQVR4nGNgGAVEADlp7//ImO6WJ6d9RMHojqCpA5EdsHTLHwwHEHIgxY4jxQHo8sSEHt0cgE3v4HMAtviimwNwxdeAOABZ8aB1ADLGJ09VB1ADE0yE6I6gNiaYDantY5IsHxQOoKUjBtQBFBXBQ94BZLcRqOWIAXUAxS0kSkpDqjXPyHEATdqGpGCqWj4KRsEooCUAAAa4SMcavL1aAAAAAElFTkSuQmCC") 10 10,
+          grab !important;
+}
+
+.react-flow__pane:active,
+.react-flow__pane.dragging,
+.active\:cursor-grabbing:active {
+  cursor: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIzMiIgaGVpZ2h0PSIzMiIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSIjNDMzOGNhIiBzdHJva2U9IiMwZjE3MmEiIHN0cm9rZS13aWR0aD0iMS41IiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPgogIDxwYXRoIGQ9Ik04IDExVjZhMiAyIDAgMCAxIDQgMHY1Ii8+CiAgPHBhdGggZD0iTTEyIDExVjdhMiAyIDAgMCAxIDQgMHY0Ii8+CiAgPHBhdGggZD0iTTE2IDExVjhhMiAyIDAgMCAxIDQgMHY0LjVhNi41IDYuNSAwIDAgMS02LjUgNi41aC0xYTYuNSA2LjUgMCAwIDEtNi41LTYuNXYtMmEyIDIgMCAwIDEgNCAwdjEiLz4KPC9zdmc+") 10 10,
+          url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAhklEQVR4nGNgGAWjgAggJ+39nxxMNcuT0z6ShaniCGQHLN3yB24wsWJDywHY4pBuDsAW1zCH0N0ByAbQLRHicwAlmCIHUIrJSoTUdARZ2ZCSOB8eDqCWIygqBQfcAdRwxIA6YMCr4gF1ANUsR3YEsQ6huuXIjhgwy5EdQfP23ygYBaNgIAAARXJqr4r0xsAAAAAASUVORK5CYII=") 10 10,
+          grabbing !important;
+}
+
+.react-flow__node,
+.react-flow__node.draggable {
+  cursor: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIzMiIgaGVpZ2h0PSIzMiIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSIjNjM2NmYxIiBzdHJva2U9IiMxZTFiNGIiIHN0cm9rZS13aWR0aD0iMS41IiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPgogIDxwYXRoIGQ9Ik0xOCAxMVY2YTIgMiAwIDAgMC0yLTJ2MGEyIDIgMCAwIDAtMiAydjAiLz4KICA8cGF0aCBkPSJNMTQgMTBWNGEyIDIgMCAwIDAtMi0ydjBhMiAyIDAgMCAwLTIgMnYyIi8+CiAgPHBhdGggZD0iTTEwIDEwLjVWNmEyIDIgMCAwIDAtMi0ydjBhMiAyIDAgMCAwLTIgMnY4Ii8+CiAgPHBhdGggZD0iTTE4IDhhMiAyIDAgMSAxIDQgMHY2YTggOCAwIDAgMS04IDhoLTJjLTIuOCAwLTQuNS0uODYtNS45OS0yLjM0bC0zLjYtMy42YTIgMiAwIDAgMSAyLjgzLTIuODJMNyAxNSIvPgo8L3N2Zz4=") 10 10,
+          url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAlklEQVR4nGNgGAVEADlp7//ImO6WJ6d9RMHojqCpA5EdsHTLHwwHEHIgxY4jxQHo8sSEHt0cgE3v4HMAtviimwNwxdeAOABZ8aB1ADLGJ09VB1ADE0yE6I6gNiaYDantY5IsHxQOoKUjBtQBFBXBQ94BZLcRqOWIAXUAxS0kSkpDqjXPyHEATdqGpGCqWj4KRsEooCUAAAa4SMcavL1aAAAAAElFTkSuQmCC") 10 10,
+          move !important;
 }
 
 /* Glowing edge animation for running DAG */

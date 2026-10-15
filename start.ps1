@@ -2,6 +2,8 @@ Write-Host "Starting InfraSentinel AIOps Platform..." -ForegroundColor Cyan
 
 # Start Backend API
 Write-Host "Launching Backend API on http://localhost:5000..." -ForegroundColor Green
+$env:ASPNETCORE_ENVIRONMENT = "Development"
+$env:ASPNETCORE_URLS = "http://localhost:5000"
 Start-Process -FilePath "d:\GravityProjects\AIOps\backend\InfraSentinel.Api\bin\Debug\net8.0\InfraSentinel.Api.exe" -WorkingDirectory "d:\GravityProjects\AIOps\backend\InfraSentinel.Api\bin\Debug\net8.0"
 
 # Start Frontend

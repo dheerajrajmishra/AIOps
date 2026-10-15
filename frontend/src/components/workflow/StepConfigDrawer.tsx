@@ -17,6 +17,7 @@ import {
   PhoneForwarded,
   Users,
   ShieldAlert,
+  SearchCode,
 } from 'lucide-react';
 import { ToolType, WorkflowStep, EscalationGroup } from '@/types';
 import { testTool, fetchEscalationGroups } from '@/lib/api';
@@ -552,6 +553,111 @@ export const StepConfigDrawer: React.FC<StepConfigDrawerProps> = ({
                   }
                   onChange={(e) => updateParam('message', e.target.value)}
                   className="w-full px-2.5 py-1.5 bg-slate-900 border border-slate-800 rounded text-slate-200 text-xs"
+                />
+              </div>
+            </div>
+          )}
+
+          {formData.toolType === 'WEB_SCRAPER' && (
+            <div className="space-y-3">
+              {/* Target Website URL */}
+              <div>
+                <label className="text-slate-400 block mb-1">Target Website URL</label>
+                <input
+                  type="text"
+                  placeholder="https://status.openai.com or https://example.com"
+                  value={parsedParams.url || formData.targetHost || ''}
+                  onChange={(e) => {
+                    updateParam('url', e.target.value);
+                    setFormData((prev) => (prev ? { ...prev, targetHost: e.target.value } : null));
+                  }}
+                  className="w-full px-2.5 py-1.5 bg-slate-900 border border-slate-800 rounded text-slate-200 font-mono text-xs focus:border-primary-500 focus:outline-none"
+                />
+              </div>
+
+              {/* Selector Type & Selector */}
+              <div className="grid grid-cols-3 gap-2">
+                <div className="col-span-1">
+                  <label className="text-slate-400 block mb-1">Mode</label>
+                  <select
+                    value={parsedParams.selectorType || 'CSS'}
+                    onChange={(e) => updateParam('selectorType', e.target.value)}
+                    className="w-full px-2.5 py-1.5 bg-slate-900 border border-slate-800 rounded text-slate-200 text-xs focus:border-primary-500 focus:outline-none"
+                  >
+                    <option value="CSS">CSS / Tag / Class</option>
+                    <option value="XPATH">XPath Query</option>
+                    <option value="REGEX">Regex Pattern</option>
+                  </select>
+                </div>
+                <div className="col-span-2">
+                  <label className="text-slate-400 block mb-1">Selector / Query</label>
+                  <input
+                    type="text"
+                    placeholder={
+                      parsedParams.selectorType === 'XPATH'
+                        ? '//div[@class="status"] or //title'
+                        : parsedParams.selectorType === 'REGEX'
+                        ? 'Status:\\s*([A-Za-z]+)'
+                        : 'h1, .status-badge, #system-status'
+                    }
+                    value={parsedParams.selector || ''}
+                    onChange={(e) => updateParam('selector', e.target.value)}
+                    className="w-full px-2.5 py-1.5 bg-slate-900 border border-slate-800 rounded text-slate-200 font-mono text-xs focus:border-primary-500 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* Extract Attribute (optional) */}
+              <div>
+                <label className="text-slate-400 block mb-1 text-[11px]">
+                  Attribute to Extract <span className="text-slate-500">(Leave blank for element text, or e.g. href, src, content)</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. href, content, data-status (optional)"
+                  value={parsedParams.extractAttribute || ''}
+                  onChange={(e) => updateParam('extractAttribute', e.target.value)}
+                  className="w-full px-2.5 py-1.5 bg-slate-900 border border-slate-800 rounded text-slate-200 font-mono text-xs focus:border-primary-500 focus:outline-none"
+                />
+              </div>
+
+              {/* Assertion Condition & Expected Value */}
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-slate-400 block mb-1">Assertion Rule</label>
+                  <select
+                    value={parsedParams.condition || 'NOT_EMPTY'}
+                    onChange={(e) => updateParam('condition', e.target.value)}
+                    className="w-full px-2.5 py-1.5 bg-slate-900 border border-slate-800 rounded text-slate-200 text-xs focus:border-primary-500 focus:outline-none"
+                  >
+                    <option value="NOT_EMPTY">Is Not Empty (Found)</option>
+                    <option value="CONTAINS">Contains Text</option>
+                    <option value="NOT_CONTAINS">Does NOT Contain Text</option>
+                    <option value="EQUALS">Exact Match</option>
+                    <option value="EXISTS">Element Exists</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-slate-400 block mb-1">Expected Match Value</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Operational, Active, 100%"
+                    disabled={parsedParams.condition === 'NOT_EMPTY' || parsedParams.condition === 'EXISTS'}
+                    value={parsedParams.expectedValue || ''}
+                    onChange={(e) => updateParam('expectedValue', e.target.value)}
+                    className="w-full px-2.5 py-1.5 bg-slate-900 border border-slate-800 rounded text-slate-200 text-xs disabled:opacity-50 focus:border-primary-500 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* Timeout */}
+              <div>
+                <label className="text-slate-400 block mb-1">HTTP Timeout (seconds)</label>
+                <input
+                  type="number"
+                  value={parsedParams.timeoutSeconds ?? 15}
+                  onChange={(e) => updateParam('timeoutSeconds', parseInt(e.target.value))}
+                  className="w-full px-2.5 py-1.5 bg-slate-900 border border-slate-800 rounded text-slate-200 text-xs focus:border-primary-500 focus:outline-none"
                 />
               </div>
             </div>
